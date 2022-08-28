@@ -11,13 +11,19 @@
  *          You may also notice some code that is labeled debug. This is for help with debugging. 
  *          I also plan on optimizing these outby commenting out the lines of code.
  */
- 
+#include<stdio.h>
+// State Machine
+enum DuctyCycleRatio{TwentyFive=0, Fifty=1,SeventyFive=2}; // These are estimates, can be fine tuned. Measured in percentagesEX: 25%,50%,75%
+
 // Global Variables
 uint32_t firstTimeSample = 0 ;
 uint32_t secondTimeSample = 0 ;
 uint32_t avgTime = 0;
 unsigned char numOfTaps = 0;
-
+DuctyCycleRatio dutyCycle;
+unsigned int posDutyCycleDelay = 0;
+unsigned int negDutyCycleDelay = 0;
+    
 // Timer Global Settings
 unsigned char timerInterruptFlag = 0;
 uint32_t miliseconds = 1;
@@ -28,6 +34,7 @@ uint32_t GetTimeSample(uint32_t sample);
 float CalculateFrequency(uint32_t ms);
 void SetTimerSettings();
 uint32_t CalculateBPM(float frequency);
+void UpdateDutyCycle(DuctyCycleRatio _dutyCycle);
 
 void setup() {
    PORTD |= 1 << 3; // Enabling Internal Pull Up on single pin PD3 with bit masking :
@@ -57,10 +64,13 @@ void loop() {
     unsigned long timeoutCount ; // in miliseconds to reset tap count
     bool startTimeout = false;
     uint32_t period = 500; // hopefully in ms
-    //int counter = 0 ;
-    
+    uint8_t counter = 0 ;
+
      while (1)
      {
+      // Determine Duty Cylce State
+      dutyCycle = TwentyFive;
+      UpdateDutyCycle(dutyCycle);
       // debug
         port_value = PIND; // Using Hexadecimal Numbering System
         
@@ -111,9 +121,30 @@ void loop() {
         if(millis() - time >= period)// pulse 
         {
             time = millis();
-            PORTB ^= (1<<5);  // PB5 output toggle// debug line
+            // hard code pin high and pin low using counter%2 ==  0 
+            // so we can add small delay to the high if or the low else to adjust duty cycle
+            if((counter%2) == 0)
+            {
+              delay(negDutyCycleDelay);
+              PORTB |= (1<<5);
+              //Serial.println("ON");// debug line
+              counter = 0;
+            }
+            else
+            {
+              delay(posDutyCycleDelay);
+              PORTB &= ~(1<<5);
+              //Serial.println("OFF"); // debug line
+            }
+            
+            counter++;
+
+            //PORTB ^= (1<<5);  // PB5 output toggle// debug line
             //Serial.print("Made it in the pulse task, period interval is "); Serial.println(period);
-        }
+         } 
+
+
+        
         // Goal is to prevent a button press hanging and ruining the user experiance. 
         //User must tap two times to set device frequency/BPM.
         if((millis() - timeoutCount >= timeoutValue) && startTimeout == true)
@@ -129,7 +160,40 @@ void loop() {
         //timerInterruptFlag = 0 ;
      } 
 }
-
+//FIXME Have pointers be inputed so we can make the pos and neg varables be loclaized
+void UpdateDutyCycle(DuctyCycleRatio _dutyCycle)
+{
+  //Serial.println(_dutyCycle);
+  //Serial.println(posDutyCycleDelay);
+  //Serial.println(negDutyCycleDelay);
+  switch(_dutyCycle)
+      {
+        case(0):
+        {
+          posDutyCycleDelay = 0;
+          negDutyCycleDelay = 100;
+          break;
+        }
+        case(1):
+        {
+          posDutyCycleDelay = 0;
+          negDutyCycleDelay = 0;
+          break;
+        }
+        case(2):
+        {
+          posDutyCycleDelay = 100;
+          negDutyCycleDelay = 0;
+          break;
+        }
+        default:
+        {
+          posDutyCycleDelay = 0;
+          negDutyCycleDelay = 0;
+          break;
+        }
+      }
+}
 
 float CalculateFrequency(uint32_t ms)
 {
@@ -146,6 +210,14 @@ uint32_t CalculateBPM(float frequency)
 {
   return (int)((float)frequency * (float)60.0);
 }
+
+uint32_t GetTimeSample(uint32_t sample)
+{
+  int avg = 0 ;
+  return avg = millis() - sample; // get second sample
+}
+
+//***************** DEAD FUNCTIONS *****************
 void SetTimerSettings()
 {
   // see ref https://create.arduino.cc/projecthub/dhorton668/pardon-me-for-interrupting-acbd1a
@@ -166,11 +238,6 @@ void SetTimerSettings()
   sei();
 }
 
-uint32_t GetTimeSample(uint32_t sample)
-{
-  int avg = 0 ;
-  return avg = millis() - sample; // get second sample
-}
 
 ISR(TIMER1_COMPA_vect)
 {
