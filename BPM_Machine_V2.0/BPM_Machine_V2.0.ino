@@ -21,11 +21,13 @@ unsigned char numOfTaps = 0;
 // Timer Global Settings
 unsigned char timerInterruptFlag = 0;
 uint32_t miliseconds = 1;
+uint16_t timeoutValue = 5000; // in miliseconds
 
 // Prototypes
 uint32_t GetTimeSample(uint32_t sample);
-uint16_t CalculateFrequency(uint32_t ms);
+float CalculateFrequency(uint32_t ms);
 void SetTimerSettings();
+uint32_t CalculateBPM(float frequency);
 
 void setup() {
    PORTD |= 1 << 3; // Enabling Internal Pull Up on single pin PD3 with bit masking :
@@ -48,13 +50,15 @@ void setup() {
 void loop() {
     // local variables
     uint8_t port_value = 0; 
-    uint16_t freqHz = 0 ;
+    float freqHz = 0 ;
     unsigned char toggleButton = 0 ; // make sure code executes on falling edge
 
     unsigned long time = millis();
-    
+    unsigned long timeoutCount ; // in miliseconds to reset tap count
+    bool startTimeout = false;
     uint32_t period = 500; // hopefully in ms
-    int counter = 0 ;
+    //int counter = 0 ;
+    
      while (1)
      {
       // debug
@@ -74,6 +78,7 @@ void loop() {
            if (numOfTaps == 1)
            {
               firstTimeSample = millis(); // get first time sample
+              timeoutCount = millis(); startTimeout = true; // start timout routine
            }
            else
            {
@@ -83,18 +88,21 @@ void loop() {
               Serial.print(firstTimeSample); Serial.print(" - "); Serial.print(millis()); Serial.print(" = ");
               Serial.println(avgTime);
               
-              // Set PWM to match button time difference
+              // Get Frequency 
               freqHz  = CalculateFrequency(avgTime);
 
+              // Get period
               period = avgTime;   
-              SetTimerSettings();
-                         
+
+              // Calculate BPM 
+              Serial.print("BPM: ");
+              Serial.println(CalculateBPM(freqHz));     
               //reset variables when done
               numOfTaps = 0;
               firstTimeSample = 0;
               avgTime = 0;
+              startTimeout = false;
            }
-
         }
         else
         {
@@ -106,6 +114,16 @@ void loop() {
             PORTB ^= (1<<5);  // PB5 output toggle// debug line
             //Serial.print("Made it in the pulse task, period interval is "); Serial.println(period);
         }
+        // Goal is to prevent a button press hanging and ruining the user experiance. 
+        //User must tap two times to set device frequency/BPM.
+        if((millis() - timeoutCount >= timeoutValue) && startTimeout == true)
+        {
+          Serial.println("Resetting tap count");
+          //Serial.println(millis() - timeoutCount);
+          startTimeout = false;
+          numOfTaps = 0;
+        }
+
         //while(!timerInterruptFlag==1){}//wait for timer to tick
         //counter++;
         //timerInterruptFlag = 0 ;
@@ -113,10 +131,10 @@ void loop() {
 }
 
 
-uint16_t CalculateFrequency(uint32_t ms)
+float CalculateFrequency(uint32_t ms)
 {
   float hertz; // we use floats temporarily for precision
-  hertz = (float)((float)(1/(float)(ms)*1000));
+  hertz = (float)((float)(1/(float)(ms)*1000)/2);
   int roundedHertz = round(hertz);
   Serial.print("Frequency calculated (HZ): ");
   Serial.print(hertz);
@@ -124,6 +142,10 @@ uint16_t CalculateFrequency(uint32_t ms)
   return hertz;
 }
 
+uint32_t CalculateBPM(float frequency)
+{
+  return (int)((float)frequency * (float)60.0);
+}
 void SetTimerSettings()
 {
   // see ref https://create.arduino.cc/projecthub/dhorton668/pardon-me-for-interrupting-acbd1a
