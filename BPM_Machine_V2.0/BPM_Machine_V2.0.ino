@@ -24,6 +24,11 @@ typedef struct ClockObject
     DuctyCycleRatio dutyCycle;
     unsigned int posDutyCycleDelay;
     unsigned int negDutyCycleDelay ;
+
+    //clock stats
+    uint32_t period; // in ms
+    float freqHz ;
+    uint16_t bpm;
 }Clock;
 
 // Global Variables
@@ -42,7 +47,7 @@ uint32_t GetTimeSample(uint32_t sample);
 float CalculateFrequency(uint32_t ms);
 void SetTimerSettings();
 uint32_t CalculateBPM(float frequency);
-void UpdateDutyCycle(DuctyCycleRatio _dutyCycle);
+void UpdateDutyCycle(Clock* clockObj);
 
 void setup() {
   // debug features
@@ -57,23 +62,22 @@ void setup() {
 
 void loop() {
     // local variables
-    uint16_t bpm = 0;
     uint8_t port_value = 0; 
-    float freqHz = 0 ;
     unsigned char toggleButton = 0 ; // make sure code executes on falling edge
 
     unsigned long time = millis();
     unsigned long timeoutCount ; // in miliseconds to reset tap count
     bool startTimeout = false;
-    uint32_t period = 500; // in ms
     uint8_t counter = 0 ;
     
     // Initialize Local Variables and Periphrials 
     // initialize struct
     Clock clock1;
-    clock1.dutyCycle = SeventyFive;
+    clock1.dutyCycle = TwentyFive;
     clock1.pin = (1<<5); // assign pin number
     clock1.port = &PORTB; // assign port number
+    
+    clock1.period = 1000;
    
     // initialize pins
     // PortD pin 3 is the beat button
@@ -115,15 +119,15 @@ void loop() {
               //Serial.println(avgTime);
               
               // Get Frequency 
-              freqHz  = CalculateFrequency(avgTime);
+              clock1.freqHz  = CalculateFrequency(avgTime);
 
               // Get period
-              period = avgTime;   
+              clock1.period = avgTime;   
 
               // Calculate BPM 
-              bpm = CalculateBPM(freqHz);
+              clock1.bpm = CalculateBPM(clock1.freqHz);
               //Serial.print("BPM: ");
-              //Serial.println(CalculateBPM(freqHz));   
+              //Serial.println(CalculateBPM(clock1.freqHz));   
 
                 
               //reset variables when done
@@ -133,8 +137,8 @@ void loop() {
               startTimeout = false;
            }
         }
-
-        if(millis() - time >= period)// pulse 
+        // pulse clocks output pin
+        if(millis() - time >= clock1.period)// pulse 
         {
             time = millis();
             // hard code pin high and pin low using counter%2 ==  0 
