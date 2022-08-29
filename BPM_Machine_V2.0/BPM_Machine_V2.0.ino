@@ -12,17 +12,25 @@
  *          I also plan on optimizing these outby commenting out the lines of code.
  */
 #include<stdio.h>
+
 // State Machine
 enum DuctyCycleRatio{TwentyFive=0, Fifty=1,SeventyFive=2}; // These are estimates, can be fine tuned. Measured in percentagesEX: 25%,50%,75%
+
+// Structs
+typedef struct ClockObject
+{
+    volatile uint8_t *port; 
+    volatile uint8_t pin ;
+    DuctyCycleRatio dutyCycle;
+    unsigned int posDutyCycleDelay;
+    unsigned int negDutyCycleDelay ;
+}Clock;
 
 // Global Variables
 uint32_t firstTimeSample = 0 ;
 uint32_t secondTimeSample = 0 ;
 uint32_t avgTime = 0;
 unsigned char numOfTaps = 0;
-DuctyCycleRatio dutyCycle;
-unsigned int posDutyCycleDelay = 0;
-unsigned int negDutyCycleDelay = 0;
     
 // Timer Global Settings
 unsigned char timerInterruptFlag = 0;
@@ -37,25 +45,19 @@ uint32_t CalculateBPM(float frequency);
 void UpdateDutyCycle(DuctyCycleRatio _dutyCycle);
 
 void setup() {
-   PORTD |= 1 << 3; // Enabling Internal Pull Up on single pin PD3 with bit masking :
-   DDRD &= ~(1<<3); // Configuring PD3 as Input
-   
-   DDRB |= 1<<5;  // PB5 output
-
-  //SetTimerSettings();
-  
   // debug features
   Serial.begin(9600);
-  Serial.print("TCCR1A Settings in HEX: ");
-  Serial.println(TCCR1A,HEX);
-  Serial.print("TCCR1B Settings in HEX: ");
-  Serial.println(TCCR1B,HEX);
+  //Serial.print("TCCR1A Settings in HEX: ");
+  //Serial.println(TCCR1A,HEX);
+  //Serial.print("TCCR1B Settings in HEX: ");
+  //Serial.println(TCCR1B,HEX);
   Serial.print("CPU Speed ");
   Serial.println(F_CPU);
 }
 
 void loop() {
     // local variables
+    uint16_t bpm = 0;
     uint8_t port_value = 0; 
     float freqHz = 0 ;
     unsigned char toggleButton = 0 ; // make sure code executes on falling edge
@@ -63,14 +65,28 @@ void loop() {
     unsigned long time = millis();
     unsigned long timeoutCount ; // in miliseconds to reset tap count
     bool startTimeout = false;
-    uint32_t period = 500; // hopefully in ms
+    uint32_t period = 500; // in ms
     uint8_t counter = 0 ;
-
+    
+    // Initialize Local Variables and Periphrials 
+    // initialize struct
+    Clock clock1;
+    clock1.dutyCycle = SeventyFive;
+    clock1.pin = (1<<5); // assign pin number
+    clock1.port = &PORTB; // assign port number
+   
+    // initialize pins
+    // PortD pin 3 is the beat button
+    PORTD |= 1 << 3; // Enabling Internal Pull Up on single pin PD3 with bit masking :
+    DDRD &= ~(1<<3); // Configuring PD3 as Input
+   
+    DDRB |= clock1.pin;  // PB5 output
+    
      while (1)
      {
       // Determine Duty Cylce State
-      dutyCycle = TwentyFive;
-      UpdateDutyCycle(dutyCycle);
+      
+      UpdateDutyCycle(&clock1);
       // debug
         port_value = PIND; // Using Hexadecimal Numbering System
         
@@ -79,12 +95,11 @@ void loop() {
           while(port_value < 9)//wait for button to release
           {    
             port_value = PIND; // get pin input
-            //Serial.print("Button press value"); // debug
-            //Serial.println(port_value); // debug
+
             // FIXME Make a function that detects inactivity after so long
           }
            numOfTaps++;
-           Serial.print("Number of taps "); Serial.println(numOfTaps);
+           //Serial.print("Number of taps "); Serial.println(numOfTaps); // debug line
            if (numOfTaps == 1)
            {
               firstTimeSample = millis(); // get first time sample
@@ -93,10 +108,11 @@ void loop() {
            else
            {
               avgTime = GetTimeSample(firstTimeSample);// get second sample
+              
               // debug lines
-              Serial.print("average time is ");
-              Serial.print(firstTimeSample); Serial.print(" - "); Serial.print(millis()); Serial.print(" = ");
-              Serial.println(avgTime);
+              //Serial.print("average time is ");
+              //Serial.print(firstTimeSample); Serial.print(" - "); Serial.print(millis()); Serial.print(" = ");
+              //Serial.println(avgTime);
               
               // Get Frequency 
               freqHz  = CalculateFrequency(avgTime);
@@ -105,17 +121,17 @@ void loop() {
               period = avgTime;   
 
               // Calculate BPM 
-              Serial.print("BPM: ");
-              Serial.println(CalculateBPM(freqHz));     
+              bpm = CalculateBPM(freqHz);
+              //Serial.print("BPM: ");
+              //Serial.println(CalculateBPM(freqHz));   
+
+                
               //reset variables when done
               numOfTaps = 0;
               firstTimeSample = 0;
               avgTime = 0;
               startTimeout = false;
            }
-        }
-        else
-        {
         }
 
         if(millis() - time >= period)// pulse 
@@ -125,22 +141,20 @@ void loop() {
             // so we can add small delay to the high if or the low else to adjust duty cycle
             if((counter%2) == 0)
             {
-              delay(negDutyCycleDelay);
-              PORTB |= (1<<5);
-              //Serial.println("ON");// debug line
+              delay(clock1.negDutyCycleDelay);
+              *clock1.port |=  clock1.pin ;
               counter = 0;
             }
             else
             {
-              delay(posDutyCycleDelay);
-              PORTB &= ~(1<<5);
-              //Serial.println("OFF"); // debug line
+              delay(clock1.posDutyCycleDelay);
+              *clock1.port &= ~ clock1.pin ;
             }
             
             counter++;
 
             //PORTB ^= (1<<5);  // PB5 output toggle// debug line
-            //Serial.print("Made it in the pulse task, period interval is "); Serial.println(period);
+            //Serial.print("Made it in the pulse task, period interval is "); Serial.println(period); // debug line
          } 
 
 
@@ -149,7 +163,7 @@ void loop() {
         //User must tap two times to set device frequency/BPM.
         if((millis() - timeoutCount >= timeoutValue) && startTimeout == true)
         {
-          Serial.println("Resetting tap count");
+          //Serial.println("Resetting tap count"); // debug line
           //Serial.println(millis() - timeoutCount);
           startTimeout = false;
           numOfTaps = 0;
@@ -160,39 +174,37 @@ void loop() {
         //timerInterruptFlag = 0 ;
      } 
 }
-//FIXME Have pointers be inputed so we can make the pos and neg varables be loclaized
-void UpdateDutyCycle(DuctyCycleRatio _dutyCycle)
+
+void UpdateDutyCycle(Clock* clockObj)
 {
-  //Serial.println(_dutyCycle);
-  //Serial.println(posDutyCycleDelay);
-  //Serial.println(negDutyCycleDelay);
-  switch(_dutyCycle)
-      {
-        case(0):
-        {
-          posDutyCycleDelay = 0;
-          negDutyCycleDelay = 100;
-          break;
-        }
-        case(1):
-        {
-          posDutyCycleDelay = 0;
-          negDutyCycleDelay = 0;
-          break;
-        }
-        case(2):
-        {
-          posDutyCycleDelay = 100;
-          negDutyCycleDelay = 0;
-          break;
-        }
-        default:
-        {
-          posDutyCycleDelay = 0;
-          negDutyCycleDelay = 0;
-          break;
-        }
-      }
+  switch(clockObj->dutyCycle)
+  {
+    case(0):
+    {
+      clockObj->posDutyCycleDelay = 0;
+      clockObj->negDutyCycleDelay = 100;
+      break;
+    }
+    case(1):
+    {
+      clockObj->posDutyCycleDelay = 0;
+      clockObj->negDutyCycleDelay = 0;
+      break;
+    }
+    case(2):
+    {
+      clockObj->posDutyCycleDelay = 100;
+      clockObj->negDutyCycleDelay = 0;
+      break;
+    }
+    default:
+    {
+      clockObj->posDutyCycleDelay = 0;
+      clockObj->negDutyCycleDelay = 0;
+      break;
+    }
+  }
+
 }
 
 float CalculateFrequency(uint32_t ms)
@@ -200,9 +212,12 @@ float CalculateFrequency(uint32_t ms)
   float hertz; // we use floats temporarily for precision
   hertz = (float)((float)(1/(float)(ms)*1000)/2);
   int roundedHertz = round(hertz);
-  Serial.print("Frequency calculated (HZ): ");
-  Serial.print(hertz);
-  Serial.print(" from the miliseconds value (ms) "); Serial.println(ms);
+  
+  // Debug print lines
+  //Serial.print("Frequency calculated (HZ): ");
+  //Serial.print(hertz);
+  //Serial.print(" from the miliseconds value (ms) "); Serial.println(ms);
+  
   return hertz;
 }
 
