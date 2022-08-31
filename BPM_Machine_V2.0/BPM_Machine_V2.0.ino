@@ -22,7 +22,7 @@ typedef struct RotaryKnob
 {
     RotaryEnocderFlag flag;
     volatile uint8_t *port; 
-    volatile uint8_t in;
+    volatile uint8_t *in;
     volatile uint8_t sw;
     volatile uint8_t dt;
     volatile uint8_t clk;
@@ -58,10 +58,10 @@ float CalculateFrequency(uint32_t ms);
 void SetTimerSettings();
 uint32_t CalculateBPM(float frequency);
 void UpdateDutyCycle(Clock* clockObj);
-//void UpdateBPM(uint16_t newBPM, Clock* clockObj);
-//void CheckSwitch( RotaryKnob* knob);
-//void CheckIncrement(RotaryKnob* knob);
-//void CheckDecrement(RotaryKnob* knob);
+void UpdateBPM(uint16_t newBPM, Clock* clockObj);
+void CheckSwitch( RotaryKnob* knob);
+void CheckIncrement(RotaryKnob* knob);
+void CheckDecrement(RotaryKnob* knob);
 
 void setup() {
   // debug features
@@ -91,61 +91,87 @@ void loop() {
     clock1.pin = (1<<5); // assign pin number
     clock1.port = &PORTB; // assign port number
     
-    clock1.period = 1000;
+    clock1.period = 576;
 
     // Rotary Encoder Initizlization 
-    /*
+    
     RotaryKnob bpmAdjust;
     bpmAdjust.flag= NONE;
     bpmAdjust.port  = &PORTD;
-    bpmAdjust.in = PIND;
+    bpmAdjust.in = &PIND;
     bpmAdjust.sw = (1<<4);
     bpmAdjust.dt = (1<<5);
     bpmAdjust.clk = (1<<6);
 
     DDRD &= ~(bpmAdjust.sw + bpmAdjust.dt + bpmAdjust.clk); // make pins inputs 
-    */
+    
     // initialize pins
     // PortD pin 3 is the beat button
     PORTD |= 1 << 3; // Enabling Internal Pull Up on single pin PD3 with bit masking :
     DDRD &= ~(1<<3); // Configuring PD3 as Input
    
     DDRB |= clock1.pin;  // PB5 output
-    
+
+    // init values
+    // Get Frequency 
+    clock1.freqHz  = CalculateFrequency(clock1.period);
+    // Calculate BPM 
+    clock1.bpm = CalculateBPM(clock1.freqHz);
+    Serial.print("BPM: ");
+    Serial.println(CalculateBPM(clock1.freqHz));  
+
+     
      while (1)
      {
       // Check for rotary knob input 
-      /*
+      
       CheckDecrement(&bpmAdjust);
       CheckIncrement(&bpmAdjust);
       CheckSwitch(&bpmAdjust);
+      //Serial.println(bpmAdjust.flag);//debug
       switch(bpmAdjust.flag)
       {
         case(0):
         {
+          //Serial.println("No flag"); // debug
           break;
         }
         case(1):
         {
           UpdateBPM((clock1.bpm += 1),&clock1);
+          // debug lines
+          Serial.println("Increment"); // debug
+          Serial.print("New BPM: "); 
+          Serial.print((clock1.bpm += 1));
+          Serial.print("\tNewPeriod");
+          Serial.println(clock1.period);
           break;
         }
         case(2):
         {
           UpdateBPM((clock1.bpm -= 1),&clock1);
+          // debug lines
+          Serial.println("Decrement"); // debug
+          Serial.print("New BPM: "); 
+          Serial.print((clock1.bpm -= 1));
+          Serial.print("\tNewPeriod");
+          Serial.println(clock1.period);
           break;
         }
-        case(3):
+        case(4):
         {
           clock1.dutyCycle = clock1.dutyCycle + 1;
           UpdateDutyCycle(&clock1);
+          Serial.println("Toggle Duty Cycle"); // debug
+          Serial.print("NewDutyCycle: ");
+          Serial.println( clock1.dutyCycle);
           break;
         }
         default:
         {break;}
       }
       bpmAdjust.flag = NONE; // flag reset
-      */
+      
       // Determine Duty Cylce State
       UpdateDutyCycle(&clock1);
       
@@ -232,60 +258,71 @@ void loop() {
         //timerInterruptFlag = 0 ;
      } 
 }
-/*
+
 void CheckSwitch( RotaryKnob* knob)
 {
-  if(!(knob->in & (knob->sw)))
+  // NOTE This function can be optimized. As of now you must hold the button 
+      //for a few miliseconds before releaseing or your input will be missed
+  //Serial.println((*knob->in & (knob->sw)));
+  while(!(*knob->in & (knob->sw)))
   {
     //Serial.println("You pressed the button");
-    if(knob->in & (knob->sw))
+    uint8_t test = 2+2;
+    if(*knob->in & (knob->sw))
     {
       //Serial.println("You released the button");
       knob->flag = SWITCH;
+      //Serial.print("Knob->Flag: ");
+      //Serial.println(knob->flag);
     }
   }
 }
 void CheckIncrement(RotaryKnob* knob)
 {
-  if((knob->in & (knob->clk)) && !(knob->in & knob->dt)) // if clk is high and dt is low
+  if((*knob->in & (knob->clk)) && !(*knob->in & knob->dt)) // if clk is high and dt is low
   {
-    while(!(knob->in & knob->dt))
+    while(!(*knob->in & knob->dt))
     {
-       while(!(knob->in & knob->clk))
+       while(!(*knob->in & knob->clk))
        {
         // wait and do nothing
        }
     }
-    delay(5); // to try to prevent debouncing
+    delay(10); // to try to prevent debouncing
     knob->flag = INCREMENT;
-    Serial.print("Increment: ");
+    //Serial.print("Increment: ");
     //Serial.println(counter);
   }
 }
 void CheckDecrement(RotaryKnob* knob)
 {
-  if((knob->in & (knob->dt)) && !(knob->in & knob->clk)) // if dt is high and clock is low
+  if((*knob->in & (knob->dt)) && !(*knob->in & knob->clk)) // if dt is high and clock is low
   {
-    while(!(knob->in & knob->clk))
+    while(!(*knob->in & knob->clk))
     {
-      while(!(knob->in & knob->dt))
+      while(!(*knob->in & knob->dt))
       {
         // wait and do nothing
       }
     }
-    delay(5); // to try to prevent debouncing
+    delay(10); // to try to prevent debouncing
     knob->flag = DECREMENT;
-    Serial.print("Decrement: ");
+    //Serial.print("Decrement: ");
     //Serial.println(counter);
   }  
 }
 
 void UpdateBPM(uint16_t newBPM, Clock* clockObj)
 {
-  float freq = (float)((float)newBPM / 60); // returns frequency of that BPM 
-  clockObj->period = (int)((((float)1.0/freq)/1000));
+  float freq = (float)((float)newBPM / 60.0); // returns frequency of that BPM 
+  clockObj->period = (int)((((float)1.0/freq)*1000.0));
+  //debug lines
+  //Serial.print("Hz");
+  //Serial.println(freq);
+  //Serial.print("ms");
+  //Serial.println(clockObj->period);
 }
-*/
+
 void UpdateDutyCycle(Clock* clockObj)
 {
   switch(clockObj->dutyCycle)
