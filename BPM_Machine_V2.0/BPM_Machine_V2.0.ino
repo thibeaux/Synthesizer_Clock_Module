@@ -12,11 +12,21 @@
  *          I also plan on optimizing these outby commenting out the lines of code.
  */
 #include<stdio.h>
-
+#include <avr/io.h> // Contains all the I/O Register Macros
+#include <stdint.h>
 // State Machine
 enum DuctyCycleRatio{TwentyFive=0, Fifty=1,SeventyFive=2}; // These are estimates, can be fine tuned. Measured in percentagesEX: 25%,50%,75%
-
+enum RotaryEnocderFlag{NONE=0,INCREMENT=1,DECREMENT=2,SWITCH=4};
 // Structs
+typedef struct RotaryKnob
+{
+    RotaryEnocderFlag flag;
+    volatile uint8_t *port; 
+    volatile uint8_t in;
+    volatile uint8_t sw;
+    volatile uint8_t dt;
+    volatile uint8_t clk;
+};
 typedef struct ClockObject
 {
     volatile uint8_t *port; 
@@ -48,6 +58,10 @@ float CalculateFrequency(uint32_t ms);
 void SetTimerSettings();
 uint32_t CalculateBPM(float frequency);
 void UpdateDutyCycle(Clock* clockObj);
+//void UpdateBPM(uint16_t newBPM, Clock* clockObj);
+//void CheckSwitch( RotaryKnob* knob);
+//void CheckIncrement(RotaryKnob* knob);
+//void CheckDecrement(RotaryKnob* knob);
 
 void setup() {
   // debug features
@@ -62,7 +76,7 @@ void setup() {
 
 void loop() {
     // local variables
-    uint8_t port_value = 0; 
+    uint8_t bpmButton = 0; 
     unsigned char toggleButton = 0 ; // make sure code executes on falling edge
 
     unsigned long time = millis();
@@ -78,7 +92,19 @@ void loop() {
     clock1.port = &PORTB; // assign port number
     
     clock1.period = 1000;
-   
+
+    // Rotary Encoder Initizlization 
+    /*
+    RotaryKnob bpmAdjust;
+    bpmAdjust.flag= NONE;
+    bpmAdjust.port  = &PORTD;
+    bpmAdjust.in = PIND;
+    bpmAdjust.sw = (1<<4);
+    bpmAdjust.dt = (1<<5);
+    bpmAdjust.clk = (1<<6);
+
+    DDRD &= ~(bpmAdjust.sw + bpmAdjust.dt + bpmAdjust.clk); // make pins inputs 
+    */
     // initialize pins
     // PortD pin 3 is the beat button
     PORTD |= 1 << 3; // Enabling Internal Pull Up on single pin PD3 with bit masking :
@@ -88,22 +114,52 @@ void loop() {
     
      while (1)
      {
-      // Determine Duty Cylce State
-      
-      UpdateDutyCycle(&clock1);
-      // debug
-        port_value = PIND; // Using Hexadecimal Numbering System
-        
-        if(port_value < 5) // if button pressed, should be less than 5. Seem to be around max 9
+      // Check for rotary knob input 
+      /*
+      CheckDecrement(&bpmAdjust);
+      CheckIncrement(&bpmAdjust);
+      CheckSwitch(&bpmAdjust);
+      switch(bpmAdjust.flag)
+      {
+        case(0):
         {
-          while(port_value < 9)//wait for button to release
+          break;
+        }
+        case(1):
+        {
+          UpdateBPM((clock1.bpm += 1),&clock1);
+          break;
+        }
+        case(2):
+        {
+          UpdateBPM((clock1.bpm -= 1),&clock1);
+          break;
+        }
+        case(3):
+        {
+          clock1.dutyCycle = clock1.dutyCycle + 1;
+          UpdateDutyCycle(&clock1);
+          break;
+        }
+        default:
+        {break;}
+      }
+      bpmAdjust.flag = NONE; // flag reset
+      */
+      // Determine Duty Cylce State
+      UpdateDutyCycle(&clock1);
+      
+        // port value will be some number when a button is pressed or unpressed. The more components added to the system the larger the number scales.
+        bpmButton = PIND & (1<<3) ; // Using Hexadecimal Numbering System
+        //Serial.println(port_value); // debug
+        if((!bpmButton)) //|| (port_value  <115))// if button pressed, should be less than 5. Seem to be around max 9
+        {
+          while((!bpmButton)) //|| (port_value <120))//wait for button to release
           {    
-            port_value = PIND; // get pin input
-
-            // FIXME Make a function that detects inactivity after so long
+            bpmButton = PIND & (1<<3); // get pin input
           }
            numOfTaps++;
-           //Serial.print("Number of taps "); Serial.println(numOfTaps); // debug line
+           Serial.print("Number of taps "); Serial.println(numOfTaps); // debug line
            if (numOfTaps == 1)
            {
               firstTimeSample = millis(); // get first time sample
@@ -126,8 +182,8 @@ void loop() {
 
               // Calculate BPM 
               clock1.bpm = CalculateBPM(clock1.freqHz);
-              //Serial.print("BPM: ");
-              //Serial.println(CalculateBPM(clock1.freqHz));   
+              Serial.print("BPM: ");
+              Serial.println(CalculateBPM(clock1.freqHz));   
 
                 
               //reset variables when done
@@ -160,8 +216,6 @@ void loop() {
             //PORTB ^= (1<<5);  // PB5 output toggle// debug line
             //Serial.print("Made it in the pulse task, period interval is "); Serial.println(period); // debug line
          } 
-
-
         
         // Goal is to prevent a button press hanging and ruining the user experiance. 
         //User must tap two times to set device frequency/BPM.
@@ -178,7 +232,60 @@ void loop() {
         //timerInterruptFlag = 0 ;
      } 
 }
+/*
+void CheckSwitch( RotaryKnob* knob)
+{
+  if(!(knob->in & (knob->sw)))
+  {
+    //Serial.println("You pressed the button");
+    if(knob->in & (knob->sw))
+    {
+      //Serial.println("You released the button");
+      knob->flag = SWITCH;
+    }
+  }
+}
+void CheckIncrement(RotaryKnob* knob)
+{
+  if((knob->in & (knob->clk)) && !(knob->in & knob->dt)) // if clk is high and dt is low
+  {
+    while(!(knob->in & knob->dt))
+    {
+       while(!(knob->in & knob->clk))
+       {
+        // wait and do nothing
+       }
+    }
+    delay(5); // to try to prevent debouncing
+    knob->flag = INCREMENT;
+    Serial.print("Increment: ");
+    //Serial.println(counter);
+  }
+}
+void CheckDecrement(RotaryKnob* knob)
+{
+  if((knob->in & (knob->dt)) && !(knob->in & knob->clk)) // if dt is high and clock is low
+  {
+    while(!(knob->in & knob->clk))
+    {
+      while(!(knob->in & knob->dt))
+      {
+        // wait and do nothing
+      }
+    }
+    delay(5); // to try to prevent debouncing
+    knob->flag = DECREMENT;
+    Serial.print("Decrement: ");
+    //Serial.println(counter);
+  }  
+}
 
+void UpdateBPM(uint16_t newBPM, Clock* clockObj)
+{
+  float freq = (float)((float)newBPM / 60); // returns frequency of that BPM 
+  clockObj->period = (int)((((float)1.0/freq)/1000));
+}
+*/
 void UpdateDutyCycle(Clock* clockObj)
 {
   switch(clockObj->dutyCycle)
@@ -203,8 +310,7 @@ void UpdateDutyCycle(Clock* clockObj)
     }
     default:
     {
-      clockObj->posDutyCycleDelay = 0;
-      clockObj->negDutyCycleDelay = 0;
+      clockObj->dutyCycle = TwentyFive;
       break;
     }
   }
