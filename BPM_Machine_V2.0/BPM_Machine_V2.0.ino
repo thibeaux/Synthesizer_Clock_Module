@@ -15,7 +15,7 @@
 #include <avr/io.h> // Contains all the I/O Register Macros
 #include <stdint.h>
 // State Machine
-enum DuctyCycleRatio{TwentyFive=0, Fifty=1,SeventyFive=2}; // These are estimates, can be fine tuned. Measured in percentagesEX: 25%,50%,75%
+enum DutyCycleRatio{TwentyFive=0, Fifty=1,SeventyFive=2}; // These are estimates, can be fine tuned. Measured in percentagesEX: 25%,50%,75%
 enum RotaryEnocderFlag{NONE=0,INCREMENT=1,DECREMENT=2,SWITCH=4};
 // Structs
 typedef struct RotaryKnob
@@ -31,7 +31,7 @@ typedef struct ClockObject
 {
     volatile uint8_t *port; 
     volatile uint8_t pin ;
-    DuctyCycleRatio dutyCycle;
+    DutyCycleRatio dutyCycle;
     unsigned int posDutyCycleDelay;
     unsigned int negDutyCycleDelay ;
 
