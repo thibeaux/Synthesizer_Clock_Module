@@ -2,7 +2,7 @@
  * Author:  Brandon Thibeaux
  * Date:    7/17/2022
  * Decription:
- *          This program is to provide a clock signal to a sequencer so that it may control both
+ *          This program is to provide a clock signal to a sequencer (4017 decade counter) so that it may control both
  *          the the speed of the sequence and the duration of each not using the clocks frequency 
  *          as the BPM and the duty cycle as note duration.
  *          
@@ -26,7 +26,7 @@ typedef struct RotaryKnob
     volatile uint8_t sw;
     volatile uint8_t dt;
     volatile uint8_t clk;
-};
+}RotaryKnob;
 typedef struct ClockObject
 {
     volatile uint8_t *port; 
@@ -49,7 +49,7 @@ unsigned char numOfTaps = 0;
     
 // Timer Global Settings
 unsigned char timerInterruptFlag = 0;
-uint32_t miliseconds = 1;
+uint32_t multiplier = 1;
 uint16_t timeoutValue = 5000; // in miliseconds
 
 // Prototypes
@@ -94,7 +94,6 @@ void loop() {
     clock1.period = 576;
 
     // Rotary Encoder Initizlization 
-    
     RotaryKnob bpmAdjust;
     bpmAdjust.flag= NONE;
     bpmAdjust.port  = &PORTD;
@@ -104,6 +103,10 @@ void loop() {
     bpmAdjust.clk = (1<<6);
 
     DDRD &= ~(bpmAdjust.sw + bpmAdjust.dt + bpmAdjust.clk); // make pins inputs 
+
+    //Timer Initilization
+    SetTimerSettings();
+
     
     // initialize pins
     // PortD pin 3 is the beat button
@@ -123,8 +126,7 @@ void loop() {
      
      while (1)
      {
-      // Check for rotary knob input 
-      
+      // Rotary Knob State Machine 
       CheckDecrement(&bpmAdjust);
       CheckIncrement(&bpmAdjust);
       CheckSwitch(&bpmAdjust);
@@ -160,8 +162,8 @@ void loop() {
         }
         case(4):
         {
-          clock1.dutyCycle = clock1.dutyCycle + 1;
-          UpdateDutyCycle(&clock1);
+          clock1.dutyCycle = clock1.dutyCycle + 1; // FIXME I don't think this is best practice and may cause compiler problems
+          UpdateDutyCycle(&clock1); // can probably be taken away
           Serial.println("Toggle Duty Cycle"); // debug
           Serial.print("NewDutyCycle: ");
           Serial.println( clock1.dutyCycle);
@@ -174,9 +176,9 @@ void loop() {
       
       // Determine Duty Cylce State
       UpdateDutyCycle(&clock1);
-      
-        // port value will be some number when a button is pressed or unpressed. The more components added to the system the larger the number scales.
-        bpmButton = PIND & (1<<3) ; // Using Hexadecimal Numbering System
+
+      // Get Beat Button Input 
+        bpmButton = PIND & (1<<3) ; //FIXME make a butto object that we can iniate and store a port reference and pin # to
         //Serial.println(port_value); // debug
         if((!bpmButton)) //|| (port_value  <115))// if button pressed, should be less than 5. Seem to be around max 9
         {
@@ -258,7 +260,7 @@ void loop() {
         //timerInterruptFlag = 0 ;
      } 
 }
-
+// SUMMARY: Function checks a rotary knob's switch to see if it was pressed and raises a flag to prompt state machine for action to be taken later. 
 void CheckSwitch( RotaryKnob* knob)
 {
   // NOTE This function can be optimized. As of now you must hold the button 
@@ -277,6 +279,8 @@ void CheckSwitch( RotaryKnob* knob)
     }
   }
 }
+
+// SUMMARY: Checks if Rotary Knob was rotated in the increment direction, then raises a flag if it was rotated. 
 void CheckIncrement(RotaryKnob* knob)
 {
   if((*knob->in & (knob->clk)) && !(*knob->in & knob->dt)) // if clk is high and dt is low
@@ -294,6 +298,7 @@ void CheckIncrement(RotaryKnob* knob)
     //Serial.println(counter);
   }
 }
+// SUMMARY: Checks if rotary knob was rotated in decremening direction. Flag is raised if it has been rotated. 
 void CheckDecrement(RotaryKnob* knob)
 {
   if((*knob->in & (knob->dt)) && !(*knob->in & knob->clk)) // if dt is high and clock is low
@@ -311,9 +316,11 @@ void CheckDecrement(RotaryKnob* knob)
     //Serial.println(counter);
   }  
 }
-
+// SUMMARY: It is passed a new BPM variable. We then calculate the frequency of that BPM, then we get the period 
+// length of that BPM value. We then set the clock's attributes to match these new updated values.
 void UpdateBPM(uint16_t newBPM, Clock* clockObj)
 {
+  // FIXME, make this update the clock's frequency and bpm varibles too while it is in here
   float freq = (float)((float)newBPM / 60.0); // returns frequency of that BPM 
   clockObj->period = (int)((((float)1.0/freq)*1000.0));
   //debug lines
@@ -322,7 +329,7 @@ void UpdateBPM(uint16_t newBPM, Clock* clockObj)
   //Serial.print("ms");
   //Serial.println(clockObj->period);
 }
-
+// SUMMARY: Updates clock's duty cycle based on clock object's duty cycle state
 void UpdateDutyCycle(Clock* clockObj)
 {
   switch(clockObj->dutyCycle)
@@ -353,7 +360,7 @@ void UpdateDutyCycle(Clock* clockObj)
   }
 
 }
-
+// SUMMARY: Calculates a frequency based on a period of time in miliseconds
 float CalculateFrequency(uint32_t ms)
 {
   float hertz; // we use floats temporarily for precision
@@ -367,18 +374,17 @@ float CalculateFrequency(uint32_t ms)
   
   return hertz;
 }
-
+// SUMMARY: Calculates BPM based on a frequency input in Hertz.
 uint32_t CalculateBPM(float frequency)
 {
   return (int)((float)frequency * (float)60.0);
 }
-
+// SUMMARY: Gets the difference between two time samples, pass it the first time sample
 uint32_t GetTimeSample(uint32_t sample)
 {
   int avg = 0 ;
   return avg = millis() - sample; // get second sample
 }
-
 //***************** DEAD FUNCTIONS *****************
 void SetTimerSettings()
 {
@@ -394,8 +400,13 @@ void SetTimerSettings()
   
   //FIXME Verify that period, frequency are the same in the osciliscope. I think that the calculate frequency function has inverted 
   // the period. Or the formula to set the OCR1A register is wrong. 
-  OCR1A = (F_CPU / 256 * ((float)miliseconds)/1000);       // Counter compare match value. 16MHz / prescaler * delay time (in seconds.)
-
+  
+  //ONLY USE FOR EXAMPLE DIVISIONS ARE NOT ACCURATE ON ARDUNIO ********************8
+  //unsigned int timerVal =((unsigned int)(F_CPU / 256) * (unsigned int)(multiplier/20));// = 3125       // Counter compare match value. 16MHz / prescaler * delay time (in seconds.)
+  //*********************************************************************************
+  uint16_t oscVal= 3125; // should be about 20 interrupts a second.
+  OCR1A = oscVal;
+  Serial.print("OCR1A Value: "); Serial.println(oscVal);
   // Reenable the interrupts 
   sei();
 }
@@ -407,5 +418,5 @@ ISR(TIMER1_COMPA_vect)
   //OCR1A to is 24ms when the value is set to 1 ms
   timerInterruptFlag = 1;
   //PORTB ^= (1<<5);  // PB5 output toggle// debug line
-  //Serial.println("Interrupt");
+  Serial.println("Interrupt");
 }
