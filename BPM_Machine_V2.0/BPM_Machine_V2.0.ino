@@ -265,7 +265,7 @@ void CheckIncrement(RotaryKnob* knob)
     knob->incrementState = 2;
     //Serial.println("I One");
   }
-  /*
+  /* DELETE IF NOT USED 9/1/2022
   if((!(*knob->in & knob->dt)) && knob->incrementState == 1)
   {
     knob->incrementState =2;
@@ -279,7 +279,7 @@ void CheckIncrement(RotaryKnob* knob)
     //Serial.println("I Three");
   }
   delay(10); // to try to prevent debouncing
-  /*
+  /* DELETE IF NOT USED 9/1/2022
   if((*knob->in & (knob->clk)) && !(*knob->in & knob->dt)) // if clk is high and dt is low
   {
     while(!(*knob->in & knob->dt))
@@ -308,7 +308,7 @@ void CheckDecrement(RotaryKnob* knob)
     knob->decrementState = 2; 
     //Serial.println("D One");
   }
-  /*
+  /* DELETE IF NOT USED 9/1/2022
   if((!(*knob->in & knob->clk)) && knob->decrementState == 1)
   {
     knob->decrementState = 2;
@@ -321,7 +321,7 @@ void CheckDecrement(RotaryKnob* knob)
     //Serial.println("D Three");
   }
   delay(10); // to try to prevent debouncing
-  /*
+  /* DELETE IF NOT USED 9/1/2022
   if((*knob->in & (knob->dt)) && !(*knob->in & knob->clk)) // if dt is high and clock is low
   {
     while(!(*knob->in & knob->clk))
