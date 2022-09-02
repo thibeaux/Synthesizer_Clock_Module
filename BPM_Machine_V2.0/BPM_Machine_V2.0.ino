@@ -26,6 +26,10 @@ typedef struct RotaryKnob
     volatile uint8_t sw;
     volatile uint8_t dt;
     volatile uint8_t clk;
+
+    volatile bool buttonState;
+    volatile uint8_t incrementState;
+    volatile uint8_t decrementState;
 }RotaryKnob;
 
 RotaryKnob bpmAdjust;
@@ -105,6 +109,9 @@ void loop() {
     bpmAdjust.sw = (1<<4);
     bpmAdjust.dt = (1<<5);
     bpmAdjust.clk = (1<<6);
+    bpmAdjust.buttonState=0;
+    bpmAdjust.incrementState = 0;
+    bpmAdjust.decrementState = 0;
 
     DDRD &= ~(bpmAdjust.sw + bpmAdjust.dt + bpmAdjust.clk); // make pins inputs 
     //Timer Initilization
@@ -215,12 +222,21 @@ void loop() {
         //timerInterruptFlag = 0 ;
      } 
 }
+
 // SUMMARY: Function checks a rotary knob's switch to see if it was pressed and raises a flag to prompt state machine for action to be taken later. 
 void CheckSwitch( RotaryKnob* knob)
 {
-  // NOTE This function can be optimized. As of now you must hold the button 
-      //for a few miliseconds before releaseing or your input will be missed
   //Serial.println((*knob->in & (knob->sw)));
+  if(!(*knob->in & (knob->sw)) && !knob->buttonState)
+  {
+    knob->buttonState = 1;
+  }
+  if((*knob->in & (knob->sw)) && knob->buttonState)
+  {
+    knob->flag = SWITCH;
+    knob->buttonState = 0;
+  }
+  /* DELETE IF NOT USED 9/1/2022
   while(!(*knob->in & (knob->sw)))
   {
     //Serial.println("You pressed the button");
@@ -232,12 +248,38 @@ void CheckSwitch( RotaryKnob* knob)
       //Serial.print("Knob->Flag: ");
       //Serial.println(knob->flag);
     }
+    
   }
+  */
 }
 
 // SUMMARY: Checks if Rotary Knob was rotated in the increment direction, then raises a flag if it was rotated. 
 void CheckIncrement(RotaryKnob* knob)
 {
+  if(knob->decrementState > 0)
+  {
+    return;
+  }
+  if(((*knob->in & (knob->clk)) && !(*knob->in & knob->dt)) && knob->incrementState == 0) // if clk is high and dt is low
+  {
+    knob->incrementState = 2;
+    //Serial.println("I One");
+  }
+  /*
+  if((!(*knob->in & knob->dt)) && knob->incrementState == 1)
+  {
+    knob->incrementState =2;
+    Serial.println("I Two");
+  }
+  */
+  if(((*knob->in & (knob->clk)) && (*knob->in & knob->dt)) && knob->incrementState == 2) // wait for both lines to come back up
+  {
+    knob->incrementState = 0;
+    knob->flag = INCREMENT;
+    //Serial.println("I Three");
+  }
+  delay(10); // to try to prevent debouncing
+  /*
   if((*knob->in & (knob->clk)) && !(*knob->in & knob->dt)) // if clk is high and dt is low
   {
     while(!(*knob->in & knob->dt))
@@ -252,10 +294,34 @@ void CheckIncrement(RotaryKnob* knob)
     //Serial.print("Increment: ");
     //Serial.println(counter);
   }
+  */
 }
 // SUMMARY: Checks if rotary knob was rotated in decremening direction. Flag is raised if it has been rotated. 
 void CheckDecrement(RotaryKnob* knob)
 {
+  if(knob->incrementState > 0)
+  {
+    return;
+  }
+  if(((*knob->in & (knob->dt)) && !(*knob->in & knob->clk)) && knob->decrementState == 0) // if dt is high and clock is low
+  {
+    knob->decrementState = 2; 
+    //Serial.println("D One");
+  }
+  /*
+  if((!(*knob->in & knob->clk)) && knob->decrementState == 1)
+  {
+    knob->decrementState = 2;
+        Serial.println("D Two");
+  }*/
+  if(((*knob->in & (knob->dt)) && (*knob->in & knob->clk)) &&( knob->decrementState == 2))
+  {
+    knob->decrementState = 0;
+    knob->flag = DECREMENT;
+    //Serial.println("D Three");
+  }
+  delay(10); // to try to prevent debouncing
+  /*
   if((*knob->in & (knob->dt)) && !(*knob->in & knob->clk)) // if dt is high and clock is low
   {
     while(!(*knob->in & knob->clk))
@@ -270,6 +336,7 @@ void CheckDecrement(RotaryKnob* knob)
     //Serial.print("Decrement: ");
     //Serial.println(counter);
   }  
+  */
 }
 // SUMMARY: It is passed a new BPM variable. We then calculate the frequency of that BPM, then we get the period 
 // length of that BPM value. We then set the clock's attributes to match these new updated values.
