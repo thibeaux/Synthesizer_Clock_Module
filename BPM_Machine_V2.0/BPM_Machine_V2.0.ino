@@ -258,6 +258,7 @@ void CheckIncrement(RotaryKnob* knob)
 {
   if(knob->decrementState > 0)
   {
+    // if we started another state, return and do not proceed
     return;
   }
   if(((*knob->in & (knob->clk)) && !(*knob->in & knob->dt)) && knob->incrementState == 0) // if clk is high and dt is low
@@ -301,6 +302,7 @@ void CheckDecrement(RotaryKnob* knob)
 {
   if(knob->incrementState > 0)
   {
+     // if we started another state, return and do not proceed
     return;
   }
   if(((*knob->in & (knob->dt)) && !(*knob->in & knob->clk)) && knob->decrementState == 0) // if dt is high and clock is low
