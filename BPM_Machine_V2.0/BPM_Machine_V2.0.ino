@@ -27,6 +27,9 @@ typedef struct RotaryKnob
     volatile uint8_t dt;
     volatile uint8_t clk;
 }RotaryKnob;
+
+RotaryKnob bpmAdjust;
+
 typedef struct ClockObject
 {
     volatile uint8_t *port; 
@@ -41,16 +44,19 @@ typedef struct ClockObject
     uint16_t bpm;
 }Clock;
 
+Clock clock1;
+
 // Global Variables
 uint32_t firstTimeSample = 0 ;
 uint32_t secondTimeSample = 0 ;
 uint32_t avgTime = 0;
 unsigned char numOfTaps = 0;
-    
+ 
 // Timer Global Settings
 unsigned char timerInterruptFlag = 0;
 uint32_t multiplier = 1;
 uint16_t timeoutValue = 5000; // in miliseconds
+
 
 // Prototypes
 uint32_t GetTimeSample(uint32_t sample);
@@ -86,15 +92,13 @@ void loop() {
     
     // Initialize Local Variables and Periphrials 
     // initialize struct
-    Clock clock1;
     clock1.dutyCycle = TwentyFive;
     clock1.pin = (1<<5); // assign pin number
     clock1.port = &PORTB; // assign port number
     
     clock1.period = 576;
 
-    // Rotary Encoder Initizlization 
-    RotaryKnob bpmAdjust;
+  // Rotary Encoder Initizlization 
     bpmAdjust.flag= NONE;
     bpmAdjust.port  = &PORTD;
     bpmAdjust.in = &PIND;
@@ -103,7 +107,6 @@ void loop() {
     bpmAdjust.clk = (1<<6);
 
     DDRD &= ~(bpmAdjust.sw + bpmAdjust.dt + bpmAdjust.clk); // make pins inputs 
-
     //Timer Initilization
     SetTimerSettings();
 
@@ -126,54 +129,6 @@ void loop() {
      
      while (1)
      {
-      // Rotary Knob State Machine 
-      CheckDecrement(&bpmAdjust);
-      CheckIncrement(&bpmAdjust);
-      CheckSwitch(&bpmAdjust);
-      //Serial.println(bpmAdjust.flag);//debug
-      switch(bpmAdjust.flag)
-      {
-        case(0):
-        {
-          //Serial.println("No flag"); // debug
-          break;
-        }
-        case(1):
-        {
-          UpdateBPM((clock1.bpm += 1),&clock1);
-          // debug lines
-          Serial.println("Increment"); // debug
-          Serial.print("New BPM: "); 
-          Serial.print((clock1.bpm += 1));
-          Serial.print("\tNewPeriod");
-          Serial.println(clock1.period);
-          break;
-        }
-        case(2):
-        {
-          UpdateBPM((clock1.bpm -= 1),&clock1);
-          // debug lines
-          Serial.println("Decrement"); // debug
-          Serial.print("New BPM: "); 
-          Serial.print((clock1.bpm -= 1));
-          Serial.print("\tNewPeriod");
-          Serial.println(clock1.period);
-          break;
-        }
-        case(4):
-        {
-          clock1.dutyCycle = clock1.dutyCycle + 1; // FIXME I don't think this is best practice and may cause compiler problems
-          UpdateDutyCycle(&clock1); // can probably be taken away
-          Serial.println("Toggle Duty Cycle"); // debug
-          Serial.print("NewDutyCycle: ");
-          Serial.println( clock1.dutyCycle);
-          break;
-        }
-        default:
-        {break;}
-      }
-      bpmAdjust.flag = NONE; // flag reset
-      
       // Determine Duty Cylce State
       UpdateDutyCycle(&clock1);
 
@@ -321,7 +276,7 @@ void CheckDecrement(RotaryKnob* knob)
 void UpdateBPM(uint16_t newBPM, Clock* clockObj)
 {
   // FIXME, make this update the clock's frequency and bpm varibles too while it is in here
-  float freq = (float)((float)newBPM / 60.0); // returns frequency of that BPM 
+  float freq = (float)((float)newBPM / 60.0)*2; // returns frequency of that BPM 
   clockObj->period = (int)((((float)1.0/freq)*1000.0));
   //debug lines
   //Serial.print("Hz");
@@ -404,7 +359,7 @@ void SetTimerSettings()
   //ONLY USE FOR EXAMPLE DIVISIONS ARE NOT ACCURATE ON ARDUNIO ********************8
   //unsigned int timerVal =((unsigned int)(F_CPU / 256) * (unsigned int)(multiplier/20));// = 3125       // Counter compare match value. 16MHz / prescaler * delay time (in seconds.)
   //*********************************************************************************
-  uint16_t oscVal= 3125; // should be about 20 interrupts a second.
+  uint16_t oscVal= 625;//3125 should be about 20 interrupts a second. 625 is about 100 interrupts a second
   OCR1A = oscVal;
   Serial.print("OCR1A Value: "); Serial.println(oscVal);
   // Reenable the interrupts 
@@ -416,7 +371,54 @@ ISR(TIMER1_COMPA_vect)
 {
   // WARNING, it seems with arduino's 16MHZ CPU speed the smallest delay amount that we can set the 
   //OCR1A to is 24ms when the value is set to 1 ms
-  timerInterruptFlag = 1;
-  //PORTB ^= (1<<5);  // PB5 output toggle// debug line
-  Serial.println("Interrupt");
+    
+  // Rotary Knob State Machine 
+  CheckDecrement(&bpmAdjust);
+  CheckIncrement(&bpmAdjust);
+  CheckSwitch(&bpmAdjust);
+  //Serial.println(bpmAdjust.flag);//debug
+  switch(bpmAdjust.flag)
+  {
+    case(0):
+    {
+      //Serial.println("No flag"); // debug
+      break;
+    }
+    case(1):
+    {
+      UpdateBPM((clock1.bpm += 1),&clock1);
+      // debug lines
+      Serial.println("Increment"); // debug
+      Serial.print("New BPM: "); 
+      Serial.print((clock1.bpm += 1));
+      Serial.print("\tNewPeriod");
+      Serial.println(clock1.period);
+      break;
+    }
+    case(2):
+    {
+      UpdateBPM((clock1.bpm -= 1),&clock1);
+      // debug lines
+      Serial.println("Decrement"); // debug
+      Serial.print("New BPM: "); 
+      Serial.print((clock1.bpm -= 1));
+      Serial.print("\tNewPeriod");
+      Serial.println(clock1.period);
+      break;
+    }
+    case(4):
+    {
+      clock1.dutyCycle = clock1.dutyCycle + 1; // FIXME I don't think this is best practice and may cause compiler problems
+      UpdateDutyCycle(&clock1); // can probably be taken away
+      Serial.println("Toggle Duty Cycle"); // debug
+      Serial.print("NewDutyCycle: ");
+      Serial.println( clock1.dutyCycle);
+      break;
+    }
+    default:
+    {break;}
+  }
+  bpmAdjust.flag = NONE; // flag reset
+  
+  //Serial.println("Interrupt");
 }
