@@ -60,8 +60,9 @@ unsigned char numOfTaps = 0;
 unsigned char timerInterruptFlag = 0;
 uint32_t multiplier = 1;
 uint16_t timeoutValue = 5000; // in miliseconds
-
-
+unsigned long time = millis();
+uint8_t counter = 0 ; // to sequency clock pulse
+    
 // Prototypes
 uint32_t GetTimeSample(uint32_t sample);
 float CalculateFrequency(uint32_t ms);
@@ -88,11 +89,8 @@ void loop() {
     // local variables
     uint8_t bpmButton = 0; 
     unsigned char toggleButton = 0 ; // make sure code executes on falling edge
-
-    unsigned long time = millis();
     unsigned long timeoutCount ; // in miliseconds to reset tap count
     bool startTimeout = false;
-    uint8_t counter = 0 ;
     
     // Initialize Local Variables and Periphrials 
     // initialize struct
@@ -136,9 +134,58 @@ void loop() {
      
      while (1)
      {
+       // Rotary Knob State Machine 
+      CheckDecrement(&bpmAdjust);
+      CheckIncrement(&bpmAdjust);
+      CheckSwitch(&bpmAdjust);
+      //Serial.println(bpmAdjust.flag);//debug
+      switch(bpmAdjust.flag)
+      {
+        case(0):
+        {
+          //Serial.println("No flag"); // debug
+          break;
+        }
+        case(1):
+        {
+          UpdateBPM((clock1.bpm += 1),&clock1);
+          // debug lines
+          Serial.println("Increment"); // debug
+          Serial.print("New BPM: "); 
+          Serial.print((clock1.bpm));
+          Serial.print("\tNewPeriod: ");
+          Serial.println(clock1.period);
+          break;
+        }
+        case(2):
+        {
+          UpdateBPM((clock1.bpm -= 1),&clock1);
+          // debug lines
+          Serial.println("Decrement"); // debug
+          Serial.print("New BPM: "); 
+          Serial.print((clock1.bpm));
+          Serial.print("\tNewPeriod: ");
+          Serial.println(clock1.period);
+          break;
+        }
+        case(4):
+        {
+          clock1.dutyCycle = clock1.dutyCycle + 1; // FIXME I don't think this is best practice and may cause compiler problems
+          UpdateDutyCycle(&clock1); // can probably be taken away
+          Serial.println("Toggle Duty Cycle"); // debug
+          Serial.print("NewDutyCycle: ");
+          Serial.println( clock1.dutyCycle);
+          break;
+        }
+        default:
+        {break;}
+      }
+      bpmAdjust.flag = NONE; // flag reset
+
+      
       // Determine Duty Cylce State
       UpdateDutyCycle(&clock1);
-
+   
       // Get Beat Button Input 
         bpmButton = PIND & (1<<3) ; //FIXME make a butto object that we can iniate and store a port reference and pin # to
         //Serial.println(port_value); // debug
@@ -168,8 +215,8 @@ void loop() {
               clock1.freqHz  = CalculateFrequency(avgTime);
 
               // Get period
-              clock1.period = avgTime;   
-
+              clock1.period = avgTime/2;   
+              Serial.print("Period: "); Serial.println(clock1.period);
               // Calculate BPM 
               clock1.bpm = CalculateBPM(clock1.freqHz);
               Serial.print("BPM: ");
@@ -183,29 +230,7 @@ void loop() {
               startTimeout = false;
            }
         }
-        // pulse clocks output pin
-        if(millis() - time >= clock1.period)// pulse 
-        {
-            time = millis();
-            // hard code pin high and pin low using counter%2 ==  0 
-            // so we can add small delay to the high if or the low else to adjust duty cycle
-            if((counter%2) == 0)
-            {
-              delay(clock1.negDutyCycleDelay);
-              *clock1.port |=  clock1.pin ;
-              counter = 0;
-            }
-            else
-            {
-              delay(clock1.posDutyCycleDelay);
-              *clock1.port &= ~ clock1.pin ;
-            }
-            
-            counter++;
-
-            //PORTB ^= (1<<5);  // PB5 output toggle// debug line
-            //Serial.print("Made it in the pulse task, period interval is "); Serial.println(period); // debug line
-         } 
+        
         
         // Goal is to prevent a button press hanging and ruining the user experiance. 
         //User must tap two times to set device frequency/BPM.
@@ -401,13 +426,13 @@ float CalculateFrequency(uint32_t ms)
 // SUMMARY: Calculates BPM based on a frequency input in Hertz.
 uint32_t CalculateBPM(float frequency)
 {
-  return (int)((float)frequency * (float)60.0);
+  return (int)((float)frequency * (float)60.0)*2;
 }
 // SUMMARY: Gets the difference between two time samples, pass it the first time sample
 uint32_t GetTimeSample(uint32_t sample)
 {
   int avg = 0 ;
-  return avg = millis() - sample; // get second sample
+  return avg = (millis() - sample); // get second sample
 }
 //***************** DEAD FUNCTIONS *****************
 void SetTimerSettings()
@@ -435,59 +460,46 @@ void SetTimerSettings()
   sei();
 }
 
-
+// This ISR is in charge of pulsing our output clock pins. It schedules when each pin needs to be turn on or off depending 
 ISR(TIMER1_COMPA_vect)
 {
   // WARNING, it seems with arduino's 16MHZ CPU speed the smallest delay amount that we can set the 
   //OCR1A to is 24ms when the value is set to 1 ms
-    
-  // Rotary Knob State Machine 
-  CheckDecrement(&bpmAdjust);
-  CheckIncrement(&bpmAdjust);
-  CheckSwitch(&bpmAdjust);
-  //Serial.println(bpmAdjust.flag);//debug
-  switch(bpmAdjust.flag)
-  {
-    case(0):
-    {
-      //Serial.println("No flag"); // debug
-      break;
-    }
-    case(1):
-    {
-      UpdateBPM((clock1.bpm += 1),&clock1);
-      // debug lines
-      Serial.println("Increment"); // debug
-      Serial.print("New BPM: "); 
-      Serial.print((clock1.bpm += 1));
-      Serial.print("\tNewPeriod");
-      Serial.println(clock1.period);
-      break;
-    }
-    case(2):
-    {
-      UpdateBPM((clock1.bpm -= 1),&clock1);
-      // debug lines
-      Serial.println("Decrement"); // debug
-      Serial.print("New BPM: "); 
-      Serial.print((clock1.bpm -= 1));
-      Serial.print("\tNewPeriod");
-      Serial.println(clock1.period);
-      break;
-    }
-    case(4):
-    {
-      clock1.dutyCycle = clock1.dutyCycle + 1; // FIXME I don't think this is best practice and may cause compiler problems
-      UpdateDutyCycle(&clock1); // can probably be taken away
-      Serial.println("Toggle Duty Cycle"); // debug
-      Serial.print("NewDutyCycle: ");
-      Serial.println( clock1.dutyCycle);
-      break;
-    }
-    default:
-    {break;}
-  }
-  bpmAdjust.flag = NONE; // flag reset
   
-  //Serial.println("Interrupt");
+        //adding an offset due to some unknown latancy found. Statistics are correct, 
+        //but when using in logic analyzer, period is often too large for specified duration
+        if(millis() - time >= clock1.period)// pulse 
+        {
+            time = millis();
+            // hard code pin high and pin low using counter%2 ==  0 
+            // so we can add small delay to the high if or the low else to adjust duty cycle
+            switch(counter)
+            {
+              // FIXME: Duty Cylce delays do not work in ISR 
+              case(0):
+              {
+                delay(clock1.negDutyCycleDelay);
+                *clock1.port |=  clock1.pin ;
+                counter = 1;
+                break;
+              }
+            
+              case(1):
+              {
+                  delay(clock1.posDutyCycleDelay);
+                  *clock1.port &= ~ clock1.pin ;
+                  counter = 0;
+                  break;
+              }
+              default:
+              {
+                counter = 0;
+                break;
+              }
+            }
+            
+            //PORTB ^= (1<<5);  // PB5 output toggle// debug line
+            //Serial.print("Made it in the pulse task, period interval is "); Serial.println(period); // debug line
+         } 
+        
 }
