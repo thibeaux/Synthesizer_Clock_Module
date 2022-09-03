@@ -98,7 +98,7 @@ void loop() {
     clock1.pin = (1<<5); // assign pin number
     clock1.port = &PORTB; // assign port number
     
-    clock1.period = 576;
+    clock1.period = 250; // BPM 120
 
   // Rotary Encoder Initizlization 
     bpmAdjust.flag= NONE;
@@ -127,9 +127,10 @@ void loop() {
     // Get Frequency 
     clock1.freqHz  = CalculateFrequency(clock1.period);
     // Calculate BPM 
-    clock1.bpm = CalculateBPM(clock1.freqHz);
+    // we divid by 2 because this function is made for live sampling. Seems to work fine when we use it with the beat button, but when we manually use it like this it has problems.
+    clock1.bpm = CalculateBPM(clock1.freqHz/2);  
     Serial.print("BPM: ");
-    Serial.println(CalculateBPM(clock1.freqHz));  
+    Serial.println(clock1.bpm );  
 
      
      while (1)
@@ -417,15 +418,16 @@ float CalculateFrequency(uint32_t ms)
   int roundedHertz = round(hertz);
   
   // Debug print lines
-  //Serial.print("Frequency calculated (HZ): ");
-  //Serial.print(hertz);
-  //Serial.print(" from the miliseconds value (ms) "); Serial.println(ms);
+  Serial.print("Frequency calculated (HZ): ");
+  Serial.print(hertz);
+  Serial.print(" from the miliseconds value (ms) "); Serial.println(ms);
   
   return hertz;
 }
 // SUMMARY: Calculates BPM based on a frequency input in Hertz.
 uint32_t CalculateBPM(float frequency)
 {
+  //Serial.print("BPM: "); Serial.println((int)((float)frequency * (float)60.0)*2);
   return (int)((float)frequency * (float)60.0)*2;
 }
 // SUMMARY: Gets the difference between two time samples, pass it the first time sample
