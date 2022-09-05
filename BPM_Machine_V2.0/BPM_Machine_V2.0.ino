@@ -14,6 +14,7 @@
 #include<stdio.h>
 #include <avr/io.h> // Contains all the I/O Register Macros
 #include <stdint.h>
+#include <math.h>
 // State Machine
 enum DutyCycleRatio{TwentyFive=0, Fifty=1,SeventyFive=2}; // These are estimates, can be fine tuned. Measured in percentagesEX: 25%,50%,75%
 enum RotaryEnocderFlag{NONE=0,INCREMENT=1,DECREMENT=2,SWITCH=4};
@@ -28,8 +29,8 @@ typedef struct RotaryKnob
     volatile uint8_t clk;
 
     volatile bool buttonState;
-    volatile uint8_t incrementState;
-    volatile uint8_t decrementState;
+    volatile int incrementState;
+    volatile int decrementState;
 }RotaryKnob;
 
 RotaryKnob bpmAdjust;
@@ -39,8 +40,8 @@ typedef struct ClockObject
     volatile uint8_t *port; 
     volatile uint8_t pin ;
     DutyCycleRatio dutyCycle;
-    unsigned int posDutyCycleDelay;
-    unsigned int negDutyCycleDelay ;
+    int posDutyCycleDelay;
+    int negDutyCycleDelay ;
 
     //clock stats
     uint32_t period; // in ms
@@ -55,13 +56,15 @@ uint32_t firstTimeSample = 0 ;
 uint32_t secondTimeSample = 0 ;
 uint32_t avgTime = 0;
 unsigned char numOfTaps = 0;
- 
+float dutyCycleValue = 0.51; // this can be thought of a a ratio percentage. See update duty cycle function for deatils how to use this. 
+
 // Timer Global Settings
 unsigned char timerInterruptFlag = 0;
 uint32_t multiplier = 1;
 uint16_t timeoutValue = 5000; // in miliseconds
-unsigned long time = millis();
-uint8_t counter = 0 ; // to sequency clock pulse
+unsigned long time1 = millis();
+uint8_t pulseToggle = 0 ; // to sequency clock pulse
+int  delaybuffer = 0;
     
 // Prototypes
 uint32_t GetTimeSample(uint32_t sample);
@@ -379,15 +382,21 @@ void UpdateBPM(uint16_t newBPM, Clock* clockObj)
   //Serial.print("ms");
   //Serial.println(clockObj->period);
 }
-// SUMMARY: Updates clock's duty cycle based on clock object's duty cycle state
+
+// SUMMARY: Updates clock's duty cycle based on clock object's duty cycle state.
+    // The way this works is case 1 and case 2 are inverses of each other. When duty cycle value is at 50%,
+    // we should get a case 1 duty positive duty cycle of 25% and a case 2 positive duty cycle of 75%.
+    // So if we use this value as an input and we find a way to sweep this value from 0 to .99, we could get some interesting functionalities to come of it. 
+    
 void UpdateDutyCycle(Clock* clockObj)
 {
   switch(clockObj->dutyCycle)
   {
     case(0):
     {
-      clockObj->posDutyCycleDelay = 0;
-      clockObj->negDutyCycleDelay = 100;
+      clockObj->posDutyCycleDelay = (int)(((clockObj->period) * dutyCycleValue + 0.5) * -1);
+      clockObj->negDutyCycleDelay = (int)((clockObj->period) * dutyCycleValue + 0.5);
+      //Serial.println(clockObj->negDutyCycleDelay);
       break;
     }
     case(1):
@@ -398,8 +407,12 @@ void UpdateDutyCycle(Clock* clockObj)
     }
     case(2):
     {
-      clockObj->posDutyCycleDelay = 100;
-      clockObj->negDutyCycleDelay = 0;
+      clockObj->posDutyCycleDelay = (int)((clockObj->period ) * dutyCycleValue + 0.5);
+      clockObj->negDutyCycleDelay = (int)(((clockObj->period) * dutyCycleValue + 0.5) * -1);
+      //Debug lines
+      //Serial.print("Period value: ");Serial.println(clockObj->period);
+      //Serial.print("Pos Delay: ");Serial.println(clockObj->posDutyCycleDelay);
+      //Serial.print("Neg Delay: ");Serial.println(clockObj->negDutyCycleDelay);
       break;
     }
     default:
@@ -467,41 +480,36 @@ ISR(TIMER1_COMPA_vect)
 {
   // WARNING, it seems with arduino's 16MHZ CPU speed the smallest delay amount that we can set the 
   //OCR1A to is 24ms when the value is set to 1 ms
-  
-        //adding an offset due to some unknown latancy found. Statistics are correct, 
-        //but when using in logic analyzer, period is often too large for specified duration
-        if(millis() - time >= clock1.period)// pulse 
+
+  if(millis() - time1 >= clock1.period  + (delaybuffer))// pulse 
+  {
+      time1 = millis();
+      // hard code pin high and pin low using counter%2 ==  0 
+      // so we can add small delay to the high if or the low else to adjust duty cycle
+      switch(pulseToggle)
+      {
+        case(0):
         {
-            time = millis();
-            // hard code pin high and pin low using counter%2 ==  0 
-            // so we can add small delay to the high if or the low else to adjust duty cycle
-            switch(counter)
-            {
-              // FIXME: Duty Cylce delays do not work in ISR 
-              case(0):
-              {
-                delay(clock1.negDutyCycleDelay);
-                *clock1.port |=  clock1.pin ;
-                counter = 1;
-                break;
-              }
-            
-              case(1):
-              {
-                  delay(clock1.posDutyCycleDelay);
-                  *clock1.port &= ~ clock1.pin ;
-                  counter = 0;
-                  break;
-              }
-              default:
-              {
-                counter = 0;
-                break;
-              }
-            }
-            
-            //PORTB ^= (1<<5);  // PB5 output toggle// debug line
-            //Serial.print("Made it in the pulse task, period interval is "); Serial.println(period); // debug line
-         } 
-        
+          *clock1.port |=  clock1.pin ;
+          pulseToggle = 1;
+          delaybuffer = clock1.posDutyCycleDelay;
+          break;
+        }
+      
+        case(1):
+        {
+            *clock1.port &= ~ clock1.pin ;
+            pulseToggle = 0;
+            delaybuffer = clock1.negDutyCycleDelay;
+            break;
+        }
+        default:
+        {
+          pulseToggle = 0;
+          break;
+        }
+      }
+   
+      //Serial.print("Made it in the pulse task, period interval is "); Serial.println(period); // debug line
+   } 
 }
