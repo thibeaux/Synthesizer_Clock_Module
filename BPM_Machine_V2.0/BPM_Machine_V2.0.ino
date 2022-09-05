@@ -17,8 +17,15 @@
 #include <math.h>
 // State Machine
 enum DutyCycleRatio{TwentyFive=0, Fifty=1,SeventyFive=2}; // These are estimates, can be fine tuned. Measured in percentagesEX: 25%,50%,75%
-enum RotaryEnocderFlag{NONE=0,INCREMENT=1,DECREMENT=2,SWITCH=4};
+enum RotaryEnocderFlag{NONE=0x00,INCREMENT=0x01,DECREMENT=0x02,SWITCH=0x04};
+enum ApplicationModes {FREQUENCY_CONTROL=0,DUTYCYCLE_CONTROL=1};
+
 // Structs
+typedef struct AppMode
+{
+  ApplicationModes appMode;
+}Application;
+
 typedef struct RotaryKnob
 {
     RotaryEnocderFlag flag;
@@ -56,7 +63,7 @@ uint32_t firstTimeSample = 0 ;
 uint32_t secondTimeSample = 0 ;
 uint32_t avgTime = 0;
 unsigned char numOfTaps = 0;
-float dutyCycleValue = 0.51; // this can be thought of a a ratio percentage. See update duty cycle function for deatils how to use this. 
+float dutyCycleValue = 0.5; // this can be thought of a a ratio percentage. See update duty cycle function for deatils how to use this. 
 
 // Timer Global Settings
 unsigned char timerInterruptFlag = 0;
@@ -102,7 +109,11 @@ void loop() {
     clock1.port = &PORTB; // assign port number
     
     clock1.period = 250; // BPM 120
-
+    
+    // Application struct init
+    Application app;
+    app.appMode = FREQUENCY_CONTROL;
+  
   // Rotary Encoder Initizlization 
     bpmAdjust.flag= NONE;
     bpmAdjust.port  = &PORTD;
@@ -142,43 +153,124 @@ void loop() {
       CheckDecrement(&bpmAdjust);
       CheckIncrement(&bpmAdjust);
       CheckSwitch(&bpmAdjust);
-      //Serial.println(bpmAdjust.flag);//debug
+      //Serial.println(bpmAdjust.flag,HEX);//debug
       switch(bpmAdjust.flag)
       {
-        case(0):
+        case(NONE):
         {
           //Serial.println("No flag"); // debug
           break;
         }
-        case(1):
+        case(INCREMENT):
         {
-          UpdateBPM((clock1.bpm += 1),&clock1);
-          // debug lines
-          Serial.println("Increment"); // debug
-          Serial.print("New BPM: "); 
-          Serial.print((clock1.bpm));
-          Serial.print("\tNewPeriod: ");
-          Serial.println(clock1.period);
+          //Serial.println("Increment case");
+          switch(app.appMode)
+          {
+            case(FREQUENCY_CONTROL):
+            { 
+              UpdateBPM((clock1.bpm += 1),&clock1);
+              // debug lines
+              Serial.println("FrequencyMode");
+              Serial.println("Increment"); // debug
+              Serial.print("New BPM: "); 
+              Serial.print((clock1.bpm));
+              Serial.print("\tNewPeriod: ");
+              Serial.println(clock1.period);
+              break;
+            }
+            case(DUTYCYCLE_CONTROL):
+            {
+              if(dutyCycleValue + 0.1 < 1)
+              {
+                dutyCycleValue += 0.1;
+                Serial.print("Ducty Cycle Mode Increment: "); Serial.println(dutyCycleValue);
+              }
+              else
+              {
+                dutyCycleValue = .9;
+              }
+
+              break;
+            }
+            default:
+            {
+              Serial.println("Defualt increment app case");
+              app.appMode = FREQUENCY_CONTROL;
+              break;
+            }
+          }
           break;
         }
-        case(2):
+        case(DECREMENT):
         {
-          UpdateBPM((clock1.bpm -= 1),&clock1);
-          // debug lines
-          Serial.println("Decrement"); // debug
-          Serial.print("New BPM: "); 
-          Serial.print((clock1.bpm));
-          Serial.print("\tNewPeriod: ");
-          Serial.println(clock1.period);
-          break;
+          //Serial.println("Decrement case");
+          switch(app.appMode)
+          {
+            case(FREQUENCY_CONTROL):
+            {
+              UpdateBPM((clock1.bpm -= 1),&clock1);
+              // debug lines
+              Serial.println("FrequencyMode");
+              Serial.println("Decrement"); // debug
+              Serial.print("New BPM: "); 
+              Serial.print((clock1.bpm));
+              Serial.print("\tNewPeriod: ");
+              Serial.println(clock1.period);
+
+              break;
+            }
+            case(DUTYCYCLE_CONTROL):
+            {
+              if(dutyCycleValue - 0.1 > -1)
+              {
+                dutyCycleValue -= 0.1;
+                Serial.print("Ducty Cycle Mode Decrement: "); Serial.println(dutyCycleValue);
+              }
+              else
+              {
+                dutyCycleValue = -0.9;
+              }
+              break;
+            }
+            default:
+            {
+              Serial.println("Defualt decrement app case");
+              app.appMode = FREQUENCY_CONTROL;
+              break;
+            }
+          }
+         break;
         }
-        case(4):
+        case(SWITCH):
         {
+          //Serial.println("Switch case");
+          switch(app.appMode)
+          {
+            case(FREQUENCY_CONTROL):
+            {
+              Serial.println(app.appMode);
+              app.appMode = DUTYCYCLE_CONTROL;
+              break;
+            }
+            case(DUTYCYCLE_CONTROL):
+            {
+              Serial.println(app.appMode);
+              app.appMode = FREQUENCY_CONTROL;
+              break;
+            }
+            default:
+            {
+              app.appMode = FREQUENCY_CONTROL;
+              break;
+            }
+          }
+          /* DELET IF NOT USED 9/5/2022
           clock1.dutyCycle = clock1.dutyCycle + 1; // FIXME I don't think this is best practice and may cause compiler problems
           UpdateDutyCycle(&clock1); // can probably be taken away
           Serial.println("Toggle Duty Cycle"); // debug
           Serial.print("NewDutyCycle: ");
           Serial.println( clock1.dutyCycle);
+          */
           break;
         }
         default:
@@ -390,6 +482,9 @@ void UpdateBPM(uint16_t newBPM, Clock* clockObj)
     
 void UpdateDutyCycle(Clock* clockObj)
 {
+  clockObj->posDutyCycleDelay = (int)(((clockObj->period) * dutyCycleValue + 0.5) * -1);
+  clockObj->negDutyCycleDelay = (int)((clockObj->period) * dutyCycleValue + 0.5);
+  /* DELETE IF NOT USED 9/5/2022
   switch(clockObj->dutyCycle)
   {
     case(0):
@@ -421,7 +516,7 @@ void UpdateDutyCycle(Clock* clockObj)
       break;
     }
   }
-
+*/
 }
 // SUMMARY: Calculates a frequency based on a period of time in miliseconds
 float CalculateFrequency(uint32_t ms)
