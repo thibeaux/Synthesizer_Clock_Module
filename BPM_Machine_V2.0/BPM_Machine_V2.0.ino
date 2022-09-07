@@ -330,7 +330,7 @@ void loop() {
               firstTimeSample = millis(); // get first time sample
               timeoutCount = millis(); 
               startTimeout = true; // start timout routine
-              window.refreshFlag = 0;
+              //window.refreshFlag = 0;
            }
            else
            {
@@ -370,7 +370,7 @@ void loop() {
           //Serial.println(millis() - timeoutCount);
           startTimeout = false;
           numOfTaps = 0;
-          window.refreshFlag = 1;
+          //window.refreshFlag = 1;
         }
 
         //while(!timerInterruptFlag==1){}//wait for timer to tick
