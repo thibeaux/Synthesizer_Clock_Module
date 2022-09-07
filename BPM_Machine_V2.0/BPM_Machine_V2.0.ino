@@ -370,6 +370,7 @@ void loop() {
         //timerInterruptFlag = 0 ;
      } 
 }
+uint8_t middleX =20;
 void UpdateWindow(Window* win,Application* app,Clock* clk)
 {
   if(win->refreshFlag)
@@ -388,9 +389,9 @@ void UpdateWindow(Window* win,Application* app,Clock* clk)
         // Not all the characters will fit on the display. This is normal.
         // Library will draw what it can and the rest will be clipped.
         display.write("FREQUENCY CONTROL\n");
-        display.write("BPM:           ");display.print(clk->bpm); display.print("\n");
-        display.write("Period(ms):    ");display.print(clk->period);display.print("\n");
-        display.write("Frequency(Hz): ");display.print(clk->freqHz);
+        display.write("BPM:             ");display.print(clk->bpm); display.print("\n");
+        display.write("Period(ms):      ");display.print(clk->period);display.print("\n");
+        display.write("Frequency(Hz):   ");display.print(clk->freqHz);
       
         display.display();
         break;
@@ -408,7 +409,14 @@ void UpdateWindow(Window* win,Application* app,Clock* clk)
         // Not all the characters will fit on the display. This is normal.
         // Library will draw what it can and the rest will be clipped.
         display.write("DUTYCYCLE CONTROL\n");
+        float mappedValue = ((clk->dutyCycleValue - -0.9)/(0.9 - -0.9))*(0.1-0.9)+0.9;
+        uint8_t buffX = middleX * mappedValue *2;
         
+        display.drawLine(0, 10, 0, display.height()-1, SSD1306_WHITE);
+        display.drawLine(0, 10, buffX, 10, SSD1306_WHITE); // display.height()-1 mean bottom of screen
+        display.drawLine(buffX, 10, buffX, display.height()-1, SSD1306_WHITE);
+        display.drawLine(buffX, display.height()-1, 40, display.height()-1, SSD1306_WHITE); 
+        display.drawLine(40, 10, 40, display.height()-1, SSD1306_WHITE);
         
         display.display();
         break;
