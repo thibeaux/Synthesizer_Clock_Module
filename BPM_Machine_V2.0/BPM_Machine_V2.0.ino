@@ -86,7 +86,7 @@ Adafruit_SSD1306 display(window.screenWidth, window.screenHeight, &Wire, window.
 // Timer Global Settings
 unsigned char timerInterruptFlag = 0;
 uint32_t multiplier = 1;
-uint16_t timeoutValue = 5000; // in miliseconds
+uint16_t timeoutValue = 3000; // in miliseconds
 unsigned long time1 = millis();
 uint8_t pulseToggle = 0 ; // to sequency clock pulse
 int  delaybuffer = 0;
@@ -171,11 +171,16 @@ void loop() {
     Serial.println(clock1.bpm );  
 
      window.refreshFlag = 1; // set value to 1 to enable refresh
+     uint16_t refreshcounter = 0;
      while (1)
      {
        // Display refresh
-       UpdateWindow(&window,&app,&clock1);
-
+       if (refreshcounter >= 100)
+       {
+          UpdateWindow(&window,&app,&clock1);
+          refreshcounter = 0;
+       }
+        refreshcounter++;
        // Rotary Knob State Machine 
        CheckDecrement(&bpmAdjust);
        CheckIncrement(&bpmAdjust);
@@ -323,7 +328,9 @@ void loop() {
            if (numOfTaps == 1)
            {
               firstTimeSample = millis(); // get first time sample
-              timeoutCount = millis(); startTimeout = true; // start timout routine
+              timeoutCount = millis(); 
+              startTimeout = true; // start timout routine
+              window.refreshFlag = 0;
            }
            else
            {
@@ -363,6 +370,7 @@ void loop() {
           //Serial.println(millis() - timeoutCount);
           startTimeout = false;
           numOfTaps = 0;
+          window.refreshFlag = 1;
         }
 
         //while(!timerInterruptFlag==1){}//wait for timer to tick
@@ -409,15 +417,17 @@ void UpdateWindow(Window* win,Application* app,Clock* clk)
         // Not all the characters will fit on the display. This is normal.
         // Library will draw what it can and the rest will be clipped.
         display.write("DUTYCYCLE CONTROL\n");
-        float mappedValue = ((clk->dutyCycleValue - -0.9)/(0.9 - -0.9))*(0.1-0.9)+0.9;
-        uint8_t buffX = middleX * mappedValue *2;
         
+        float mappedValue = ((clk->dutyCycleValue - -0.9)/(0.9 - -0.9))*(0.1-0.9)+0.9; // calculate and map the input number dutycylce value to some number that we can apply as a multipler to our graph
+        uint8_t buffX = middleX * mappedValue *2; // adding *2 to offset and balance out some ratio problems
+        // draw graph
         display.drawLine(0, 10, 0, display.height()-1, SSD1306_WHITE);
         display.drawLine(0, 10, buffX, 10, SSD1306_WHITE); // display.height()-1 mean bottom of screen
         display.drawLine(buffX, 10, buffX, display.height()-1, SSD1306_WHITE);
         display.drawLine(buffX, display.height()-1, 40, display.height()-1, SSD1306_WHITE); 
         display.drawLine(40, 10, 40, display.height()-1, SSD1306_WHITE);
-        
+
+        display.print("        + Duty Cycle: \n          ");display.print(mappedValue * 100); display.print("%");
         display.display();
         break;
       }
