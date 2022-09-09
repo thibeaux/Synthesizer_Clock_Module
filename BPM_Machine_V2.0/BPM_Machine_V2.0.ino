@@ -125,6 +125,8 @@ void loop() {
     
     // Initialize display
     DisplayInit();
+   display.invertDisplay(false);
+   display.setRotation(90);
     
     // Initialize Local Variables and Periphrials 
     // initialize struct
