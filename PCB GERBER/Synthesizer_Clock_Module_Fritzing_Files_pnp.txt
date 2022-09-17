@@ -4,7 +4,7 @@
 *eMail=
 *
 *Project=Synthesizer_Clock_Module_Fritzing_Files
-*Date=14:10:56
+*Date=14:20:27
 *CreatedBy=Fritzing 0.9.10b.2022-07-01.CD-2134-0-40d23c29
 *
 *
@@ -32,7 +32,7 @@
 17;;;66.6101;-14.7235;0;Bottom;Hole2
 18;;;42.1242;-23.291;0;Bottom;Via7
 19;;THT;2.7699;-37.6686;0;Bottom;Signal out2
-20;;diode-1n4148;59.8258;-26.2386;0;Bottom;D1
+20;;diode-1n4148;59.8258;-26.8031;0;Bottom;D1
 21;;THT;55.5965;-5.8889;-90;Bottom;I2C Test
 22;;THT;20.5499;-35.1286;0;Bottom;12V Input
 23;;;18.5067;-2.25492;90;Bottom;ENCODER1
