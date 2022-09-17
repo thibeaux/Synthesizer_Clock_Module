@@ -1,0 +1,41 @@
+*Pick And Place List
+*Company=
+*Author=
+*eMail=
+*
+*Project=Synthesizer_Clock_Module_Fritzing_Files
+*Date=14:10:56
+*CreatedBy=Fritzing 0.9.10b.2022-07-01.CD-2134-0-40d23c29
+*
+*
+*Coordinates in mm, always center of component
+*Origin 0/0=Lower left corner of PCB
+*Rotation in degree (0-360, math. pos.)
+*
+*No;Value;Package;X;Y;Rotation;Side;Name
+1;;dip08;11.6599;-35.1286;0;Bottom;IC1
+2;;;23.0899;-8.45866;0;Bottom;Via6
+3;;;6.5799;-2.24976;180;Bottom;Button
+4;;;28.8769;-33.4562;0;Bottom;TXT1
+5;;diode-1n4148;42.4221;-11.1398;-90;Bottom;D2
+6;;;49.5299;-38.267;0;Bottom;TXT2
+7;;;5.21484;-8.01666;0;Bottom;TXT3
+8;;THT;2.7699;-30.0486;0;Bottom;Signal out1
+9;;;54.15;-3.54018;0;Bottom;TXT4
+10;;;28.5495;-36.2116;0;Bottom;TXT1
+11;;;57.2926;-3.54018;0;Bottom;TXT5
+12;;THT;6.5799;-23.9103;-90;Bottom;VIN
+13;;;65.8755;-31.4576;0;Bottom;Hole3
+14;;;23.0984;-13.5387;-90;Bottom;MCU: Arduino Nano
+15;;;51.171;-22.1831;90;Bottom;64 x 32 OLED SSD1306
+16;100000;THT;24.4599;-40.7584;0;Bottom;R2
+17;;;66.6101;-14.7235;0;Bottom;Hole2
+18;;;42.1242;-23.291;0;Bottom;Via7
+19;;THT;2.7699;-37.6686;0;Bottom;Signal out2
+20;;diode-1n4148;59.8258;-26.2386;0;Bottom;D1
+21;;THT;55.5965;-5.8889;-90;Bottom;I2C Test
+22;;THT;20.5499;-35.1286;0;Bottom;12V Input
+23;;;18.5067;-2.25492;90;Bottom;ENCODER1
+24;;;30.3223;-27.0853;0;Bottom;Hole1
+25;100000;THT;12.9299;-28.7786;0;Bottom;R1
+26;;;33.2499;-8.45866;0;Bottom;Via5
