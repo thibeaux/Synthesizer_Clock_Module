@@ -11,16 +11,32 @@
  *          You may also notice some code that is labeled debug. This is for help with debugging. 
  *          I also plan on optimizing these outby commenting out the lines of code.
  */
+// Essential
 #include<stdio.h>
 #include <avr/io.h> // Contains all the I/O Register Macros
 #include <stdint.h>
 #include <math.h>
+// For Display integration
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+
 // State Machine
 //enum DutyCycleRatio{TwentyFive=0, Fifty=1,SeventyFive=2}; // These are estimates, can be fine tuned. Measured in percentagesEX: 25%,50%,75% // Delete if not used 9/5/2022
 enum RotaryEnocderFlag{NONE=0x00,INCREMENT=0x01,DECREMENT=0x02,SWITCH=0x04};
 enum ApplicationModes {FREQUENCY_CONTROL=0,DUTYCYCLE_CONTROL=1};
 
 // Structs
+typedef struct Window
+{
+  const uint8_t screenWidth = 128;
+  const uint8_t screenHeight = 32;
+  const uint8_t address = 0x3C;
+
+  const int8_t OLEDReset = -1;// Reset pin # (or -1 if sharing Arduino reset pin)
+  uint8_t refreshFlag = 0; // needs to be one for refresh
+}Window;
+Window window;
 typedef struct AppMode
 {
   ApplicationModes appMode;
@@ -46,9 +62,10 @@ typedef struct ClockObject
 {
     volatile uint8_t *port; 
     volatile uint8_t pin ;
-    DutyCycleRatio dutyCycle;
+    //DutyCycleRatio dutyCycle; // delete if not used
     int posDutyCycleDelay;
     int negDutyCycleDelay ;
+    float dutyCycleValue = 0.5; // this can be thought of a a ratio percentage. See update duty cycle function for deatils how to use this. 
 
     //clock stats
     uint32_t period; // in ms
@@ -63,12 +80,13 @@ uint32_t firstTimeSample = 0 ;
 uint32_t secondTimeSample = 0 ;
 uint32_t avgTime = 0;
 unsigned char numOfTaps = 0;
-float dutyCycleValue = 0.5; // this can be thought of a a ratio percentage. See update duty cycle function for deatils how to use this. 
 
+// DisplayGlobal Variables
+Adafruit_SSD1306 display(window.screenWidth, window.screenHeight, &Wire, window.OLEDReset);
 // Timer Global Settings
 unsigned char timerInterruptFlag = 0;
 uint32_t multiplier = 1;
-uint16_t timeoutValue = 5000; // in miliseconds
+uint16_t timeoutValue = 3000; // in miliseconds
 unsigned long time1 = millis();
 uint8_t pulseToggle = 0 ; // to sequency clock pulse
 int  delaybuffer = 0;
@@ -83,6 +101,9 @@ void UpdateBPM(uint16_t newBPM, Clock* clockObj);
 void CheckSwitch( RotaryKnob* knob);
 void CheckIncrement(RotaryKnob* knob);
 void CheckDecrement(RotaryKnob* knob);
+
+void DisplayInit();
+void UpdateWindow(Window* win,Application* app, Clock* clk);
 
 void setup() {
   // debug features
@@ -102,9 +123,14 @@ void loop() {
     unsigned long timeoutCount ; // in miliseconds to reset tap count
     bool startTimeout = false;
     
+    // Initialize display
+    DisplayInit();
+   display.invertDisplay(false);
+   display.setRotation(90);
+    
     // Initialize Local Variables and Periphrials 
     // initialize struct
-    clock1.dutyCycle = TwentyFive;
+    //clock1.dutyCycle = TwentyFive; // delete if not used
     clock1.pin = (1<<5); // assign pin number
     clock1.port = &PORTB; // assign port number
     
@@ -146,14 +172,22 @@ void loop() {
     Serial.print("BPM: ");
     Serial.println(clock1.bpm );  
 
-     
+     window.refreshFlag = 1; // set value to 1 to enable refresh
+     uint16_t refreshcounter = 0;
      while (1)
      {
+       // Display refresh
+       if (refreshcounter >= 100)
+       {
+          UpdateWindow(&window,&app,&clock1);
+          refreshcounter = 0;
+       }
+        refreshcounter++;
        // Rotary Knob State Machine 
-      CheckDecrement(&bpmAdjust);
-      CheckIncrement(&bpmAdjust);
-      CheckSwitch(&bpmAdjust);
-      //Serial.println(bpmAdjust.flag,HEX);//debug
+       CheckDecrement(&bpmAdjust);
+       CheckIncrement(&bpmAdjust);
+       CheckSwitch(&bpmAdjust);
+       //Serial.println(bpmAdjust.flag,HEX);//debug
       switch(bpmAdjust.flag)
       {
         case(NONE):
@@ -180,14 +214,14 @@ void loop() {
             }
             case(DUTYCYCLE_CONTROL):
             {
-              if(dutyCycleValue + 0.1 < 1)
+              if(clock1.dutyCycleValue + 0.1 < 1)
               {
-                dutyCycleValue += 0.1;
-                Serial.print("Ducty Cycle Mode Increment: "); Serial.println(dutyCycleValue);
+                clock1.dutyCycleValue += 0.1;
+                Serial.print("Ducty Cycle Mode Increment: "); Serial.println(clock1.dutyCycleValue);
               }
               else
               {
-                dutyCycleValue = .9;
+                clock1.dutyCycleValue = .9;
               }
 
               break;
@@ -221,14 +255,14 @@ void loop() {
             }
             case(DUTYCYCLE_CONTROL):
             {
-              if(dutyCycleValue - 0.1 > -1)
+              if(clock1.dutyCycleValue - 0.1 > -1)
               {
-                dutyCycleValue -= 0.1;
-                Serial.print("Ducty Cycle Mode Decrement: "); Serial.println(dutyCycleValue);
+                clock1.dutyCycleValue -= 0.1;
+                Serial.print("Ducty Cycle Mode Decrement: "); Serial.println(clock1.dutyCycleValue);
               }
               else
               {
-                dutyCycleValue = -0.9;
+                clock1.dutyCycleValue = -0.9;
               }
               break;
             }
@@ -296,7 +330,9 @@ void loop() {
            if (numOfTaps == 1)
            {
               firstTimeSample = millis(); // get first time sample
-              timeoutCount = millis(); startTimeout = true; // start timout routine
+              timeoutCount = millis(); 
+              startTimeout = true; // start timout routine
+              //window.refreshFlag = 0;
            }
            else
            {
@@ -336,6 +372,7 @@ void loop() {
           //Serial.println(millis() - timeoutCount);
           startTimeout = false;
           numOfTaps = 0;
+          //window.refreshFlag = 1;
         }
 
         //while(!timerInterruptFlag==1){}//wait for timer to tick
@@ -343,7 +380,103 @@ void loop() {
         //timerInterruptFlag = 0 ;
      } 
 }
+uint8_t middleX =20;
+void UpdateWindow(Window* win,Application* app,Clock* clk)
+{
+  if(win->refreshFlag)
+  {
+    switch(app->appMode)
+    {
+      case(FREQUENCY_CONTROL):
+      {
+        display.clearDisplay();
+  
+        display.setTextSize(1);      // Normal 1:1 pixel scale
+        display.setTextColor(SSD1306_WHITE); // Draw white text
+        display.setCursor(0, 0);     // Start at top-left corner
+        display.cp437(true);         // Use full 256 char 'Code Page 437' font
+      
+        // Not all the characters will fit on the display. This is normal.
+        // Library will draw what it can and the rest will be clipped.
+        display.write("FREQUENCY CONTROL\n");
+        display.write("BPM:             ");display.print(clk->bpm); display.print("\n");
+        display.write("Period(ms):      ");display.print(clk->period);display.print("\n");
+        display.write("Frequency(Hz):   ");display.print(clk->freqHz);
+      
+        display.display();
+        break;
+      }
+    
+      case(DUTYCYCLE_CONTROL):
+      {
+        display.clearDisplay();
+  
+        display.setTextSize(1);      // Normal 1:1 pixel scale
+        display.setTextColor(SSD1306_WHITE); // Draw white text
+        display.setCursor(0, 0);     // Start at top-left corner
+        display.cp437(true);         // Use full 256 char 'Code Page 437' font
+      
+        // Not all the characters will fit on the display. This is normal.
+        // Library will draw what it can and the rest will be clipped.
+        display.write("DUTYCYCLE CONTROL\n");
+        
+        float mappedValue = ((clk->dutyCycleValue - -0.9)/(0.9 - -0.9))*(0.1-0.9)+0.9; // calculate and map the input number dutycylce value to some number that we can apply as a multipler to our graph
+        uint8_t buffX = middleX * mappedValue *2; // adding *2 to offset and balance out some ratio problems
+        // draw graph
+        display.drawLine(0, 10, 0, display.height()-1, SSD1306_WHITE);
+        display.drawLine(0, 10, buffX, 10, SSD1306_WHITE); // display.height()-1 mean bottom of screen
+        display.drawLine(buffX, 10, buffX, display.height()-1, SSD1306_WHITE);
+        display.drawLine(buffX, display.height()-1, 40, display.height()-1, SSD1306_WHITE); 
+        display.drawLine(40, 10, 40, display.height()-1, SSD1306_WHITE);
 
+        display.print("        + Duty Cycle: \n          ");display.print(mappedValue * 100); display.print("%");
+        display.display();
+        break;
+      }
+      default:
+      {
+        display.clearDisplay();
+  
+        display.setTextSize(1);      // Normal 1:1 pixel scale
+        display.setTextColor(SSD1306_WHITE); // Draw white text
+        display.setCursor(0, 0);     // Start at top-left corner
+        display.cp437(true);         // Use full 256 char 'Code Page 437' font
+      
+        // Not all the characters will fit on the display. This is normal.
+        // Library will draw what it can and the rest will be clipped.
+        display.write("Error, default case detected");
+      
+        display.display();
+        break;
+      }
+    }
+  }
+}
+void DisplayInit()
+{
+   // initialize GUI Display SSD1306
+    
+    // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
+    if(!display.begin(SSD1306_SWITCHCAPVCC, window.address)) {
+    Serial.println(F("SSD1306 allocation failed"));
+    for(;;); // Don't proceed, loop forever
+    }
+    // Show initial display buffer contents on the screen --
+    // the library initializes this with an Adafruit splash screen.
+    display.display();
+    
+    // Clear the buffer
+    display.clearDisplay();
+    // Draw a single pixel in white
+    //display.drawPixel(10, 10, SSD1306_WHITE); // uncomment this line if you want to write the pixel
+    // Show the display buffer on the screen. You MUST call display() after
+    // drawing commands to make them visible on screen!
+    display.display();
+    // display.display() is NOT necessary after every single drawing command,
+    // unless that's what you want...rather, you can batch up a bunch of
+    // drawing operations and then update the screen all at once by calling
+    // display.display(). These examples demonstrate both approaches...
+}
 // SUMMARY: Function checks a rotary knob's switch to see if it was pressed and raises a flag to prompt state machine for action to be taken later. 
 void CheckSwitch( RotaryKnob* knob)
 {
@@ -387,6 +520,7 @@ void CheckIncrement(RotaryKnob* knob)
     knob->incrementState = 2;
     //Serial.println("I One");
   }
+  delay(10); // to try to prevent debouncing
   /* DELETE IF NOT USED 9/1/2022
   if((!(*knob->in & knob->dt)) && knob->incrementState == 1)
   {
@@ -400,7 +534,7 @@ void CheckIncrement(RotaryKnob* knob)
     knob->flag = INCREMENT;
     //Serial.println("I Three");
   }
-  delay(10); // to try to prevent debouncing
+
   /* DELETE IF NOT USED 9/1/2022
   if((*knob->in & (knob->clk)) && !(*knob->in & knob->dt)) // if clk is high and dt is low
   {
@@ -431,6 +565,7 @@ void CheckDecrement(RotaryKnob* knob)
     knob->decrementState = 2; 
     //Serial.println("D One");
   }
+  delay(10); // to try to prevent debouncing
   /* DELETE IF NOT USED 9/1/2022
   if((!(*knob->in & knob->clk)) && knob->decrementState == 1)
   {
@@ -443,7 +578,7 @@ void CheckDecrement(RotaryKnob* knob)
     knob->flag = DECREMENT;
     //Serial.println("D Three");
   }
-  delay(10); // to try to prevent debouncing
+
   /* DELETE IF NOT USED 9/1/2022
   if((*knob->in & (knob->dt)) && !(*knob->in & knob->clk)) // if dt is high and clock is low
   {
@@ -467,6 +602,7 @@ void UpdateBPM(uint16_t newBPM, Clock* clockObj)
 {
   // FIXME, make this update the clock's frequency and bpm varibles too while it is in here
   float freq = (float)((float)newBPM / 60.0)*2; // returns frequency of that BPM 
+  clockObj->freqHz = freq/2; // for display purposes, seems to work, so I'll leave it
   clockObj->period = (int)((((float)1.0/freq)*1000.0));
   //debug lines
   //Serial.print("Hz");
@@ -482,8 +618,8 @@ void UpdateBPM(uint16_t newBPM, Clock* clockObj)
     
 void UpdateDutyCycle(Clock* clockObj)
 {
-  clockObj->posDutyCycleDelay = (int)(((clockObj->period) * dutyCycleValue + 0.5) * -1);
-  clockObj->negDutyCycleDelay = (int)((clockObj->period) * dutyCycleValue + 0.5);
+  clockObj->posDutyCycleDelay = (int)(((clockObj->period) * clockObj->dutyCycleValue + 0.5) * -1);
+  clockObj->negDutyCycleDelay = (int)((clockObj->period) * clockObj->dutyCycleValue + 0.5);
   /* DELETE IF NOT USED 9/5/2022
   switch(clockObj->dutyCycle)
   {
