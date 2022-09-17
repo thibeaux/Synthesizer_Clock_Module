@@ -21,6 +21,11 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
+// Definitions
+/* **** Uncomment debug definition to put into debug mode and activate print lines. This definition is to help optimize unnecessary code in production version **** */
+// #define debug 1 
+/* ******************** */
+
 // State Machine
 //enum DutyCycleRatio{TwentyFive=0, Fifty=1,SeventyFive=2}; // These are estimates, can be fine tuned. Measured in percentagesEX: 25%,50%,75% // Delete if not used 9/5/2022
 enum RotaryEnocderFlag{NONE=0x00,INCREMENT=0x01,DECREMENT=0x02,SWITCH=0x04};
@@ -106,6 +111,7 @@ void DisplayInit();
 void UpdateWindow(Window* win,Application* app, Clock* clk);
 
 void setup() {
+#ifdef debug  
   // debug features
   Serial.begin(9600);
   //Serial.print("TCCR1A Settings in HEX: ");
@@ -114,6 +120,7 @@ void setup() {
   //Serial.println(TCCR1B,HEX);
   Serial.print("CPU Speed ");
   Serial.println(F_CPU);
+#endif  
 }
 
 void loop() {
@@ -130,7 +137,6 @@ void loop() {
     
     // Initialize Local Variables and Periphrials 
     // initialize struct
-    //clock1.dutyCycle = TwentyFive; // delete if not used
     clock1.pin = (1<<5); // assign pin number
     clock1.port = &PORTB; // assign port number
     
@@ -169,9 +175,10 @@ void loop() {
     // Calculate BPM 
     // we divid by 2 because this function is made for live sampling. Seems to work fine when we use it with the beat button, but when we manually use it like this it has problems.
     clock1.bpm = CalculateBPM(clock1.freqHz/2);  
+    #ifdef debug
     Serial.print("BPM: ");
     Serial.println(clock1.bpm );  
-
+    #endif
      window.refreshFlag = 1; // set value to 1 to enable refresh
      uint16_t refreshcounter = 0;
      while (1)
@@ -203,13 +210,16 @@ void loop() {
             case(FREQUENCY_CONTROL):
             { 
               UpdateBPM((clock1.bpm += 1),&clock1);
-              // debug lines
+
+              #ifdef debug
               Serial.println("FrequencyMode");
               Serial.println("Increment"); // debug
               Serial.print("New BPM: "); 
               Serial.print((clock1.bpm));
               Serial.print("\tNewPeriod: ");
               Serial.println(clock1.period);
+              #endif
+              
               break;
             }
             case(DUTYCYCLE_CONTROL):
@@ -217,7 +227,10 @@ void loop() {
               if(clock1.dutyCycleValue + 0.1 < 1)
               {
                 clock1.dutyCycleValue += 0.1;
+
+                #ifdef debug
                 Serial.print("Ducty Cycle Mode Increment: "); Serial.println(clock1.dutyCycleValue);
+                #endif
               }
               else
               {
@@ -228,7 +241,10 @@ void loop() {
             }
             default:
             {
+              #ifdef debug
               Serial.println("Defualt increment app case");
+              #endif
+                            
               app.appMode = FREQUENCY_CONTROL;
               break;
             }
@@ -243,13 +259,15 @@ void loop() {
             case(FREQUENCY_CONTROL):
             {
               UpdateBPM((clock1.bpm -= 1),&clock1);
-              // debug lines
+              
+              #ifdef debug
               Serial.println("FrequencyMode");
               Serial.println("Decrement"); // debug
               Serial.print("New BPM: "); 
               Serial.print((clock1.bpm));
               Serial.print("\tNewPeriod: ");
               Serial.println(clock1.period);
+              #endif
 
               break;
             }
@@ -258,7 +276,10 @@ void loop() {
               if(clock1.dutyCycleValue - 0.1 > -1)
               {
                 clock1.dutyCycleValue -= 0.1;
+                
+                #ifdef debug                
                 Serial.print("Ducty Cycle Mode Decrement: "); Serial.println(clock1.dutyCycleValue);
+                #endif
               }
               else
               {
@@ -268,7 +289,10 @@ void loop() {
             }
             default:
             {
+              #ifdef debug
               Serial.println("Defualt decrement app case");
+              #endif
+              
               app.appMode = FREQUENCY_CONTROL;
               break;
             }
@@ -277,18 +301,23 @@ void loop() {
         }
         case(SWITCH):
         {
-          //Serial.println("Switch case");
           switch(app.appMode)
           {
             case(FREQUENCY_CONTROL):
             {
+              #ifdef debug
               Serial.println(app.appMode);
+              #endif
+
               app.appMode = DUTYCYCLE_CONTROL;
               break;
             }
             case(DUTYCYCLE_CONTROL):
             {
+              #ifdef debug
               Serial.println(app.appMode);
+              #endif
+              
               app.appMode = FREQUENCY_CONTROL;
               break;
             }
@@ -298,13 +327,6 @@ void loop() {
               break;
             }
           }
-          /* DELET IF NOT USED 9/5/2022
-          clock1.dutyCycle = clock1.dutyCycle + 1; // FIXME I don't think this is best practice and may cause compiler problems
-          UpdateDutyCycle(&clock1); // can probably be taken away
-          Serial.println("Toggle Duty Cycle"); // debug
-          Serial.print("NewDutyCycle: ");
-          Serial.println( clock1.dutyCycle);
-          */
           break;
         }
         default:
@@ -317,8 +339,8 @@ void loop() {
       UpdateDutyCycle(&clock1);
    
       // Get Beat Button Input 
-        bpmButton = PIND & (1<<3) ; //FIXME make a butto object that we can iniate and store a port reference and pin # to
-        //Serial.println(port_value); // debug
+        bpmButton = PIND & (1<<3) ;
+
         if((!bpmButton)) //|| (port_value  <115))// if button pressed, should be less than 5. Seem to be around max 9
         {
           while((!bpmButton)) //|| (port_value <120))//wait for button to release
@@ -332,27 +354,34 @@ void loop() {
               firstTimeSample = millis(); // get first time sample
               timeoutCount = millis(); 
               startTimeout = true; // start timout routine
-              //window.refreshFlag = 0;
            }
            else
            {
               avgTime = GetTimeSample(firstTimeSample);// get second sample
               
-              // debug lines
-              //Serial.print("average time is ");
-              //Serial.print(firstTimeSample); Serial.print(" - "); Serial.print(millis()); Serial.print(" = ");
-              //Serial.println(avgTime);
+              #ifdef debug
+              Serial.print("average time is ");
+              Serial.print(firstTimeSample); Serial.print(" - "); Serial.print(millis()); Serial.print(" = ");
+              Serial.println(avgTime);
+              #endif
               
               // Get Frequency 
               clock1.freqHz  = CalculateFrequency(avgTime);
 
               // Get period
-              clock1.period = avgTime/2;   
+              clock1.period = avgTime/2;  
+
+              #ifdef debug 
               Serial.print("Period: "); Serial.println(clock1.period);
+              #endif
+              
               // Calculate BPM 
               clock1.bpm = CalculateBPM(clock1.freqHz);
+
+              #ifdef debug
               Serial.print("BPM: ");
               Serial.println(CalculateBPM(clock1.freqHz));   
+              #endif
 
                 
               //reset variables when done
@@ -368,16 +397,9 @@ void loop() {
         //User must tap two times to set device frequency/BPM.
         if((millis() - timeoutCount >= timeoutValue) && startTimeout == true)
         {
-          //Serial.println("Resetting tap count"); // debug line
-          //Serial.println(millis() - timeoutCount);
           startTimeout = false;
           numOfTaps = 0;
-          //window.refreshFlag = 1;
         }
-
-        //while(!timerInterruptFlag==1){}//wait for timer to tick
-        //counter++;
-        //timerInterruptFlag = 0 ;
      } 
 }
 uint8_t middleX =20;
@@ -490,21 +512,6 @@ void CheckSwitch( RotaryKnob* knob)
     knob->flag = SWITCH;
     knob->buttonState = 0;
   }
-  /* DELETE IF NOT USED 9/1/2022
-  while(!(*knob->in & (knob->sw)))
-  {
-    //Serial.println("You pressed the button");
-    uint8_t test = 2+2;
-    if(*knob->in & (knob->sw))
-    {
-      //Serial.println("You released the button");
-      knob->flag = SWITCH;
-      //Serial.print("Knob->Flag: ");
-      //Serial.println(knob->flag);
-    }
-    
-  }
-  */
 }
 
 // SUMMARY: Checks if Rotary Knob was rotated in the increment direction, then raises a flag if it was rotated. 
@@ -518,39 +525,14 @@ void CheckIncrement(RotaryKnob* knob)
   if(((*knob->in & (knob->clk)) && !(*knob->in & knob->dt)) && knob->incrementState == 0) // if clk is high and dt is low
   {
     knob->incrementState = 2;
-    //Serial.println("I One");
   }
   delay(10); // to try to prevent debouncing
-  /* DELETE IF NOT USED 9/1/2022
-  if((!(*knob->in & knob->dt)) && knob->incrementState == 1)
-  {
-    knob->incrementState =2;
-    Serial.println("I Two");
-  }
-  */
+  
   if(((*knob->in & (knob->clk)) && (*knob->in & knob->dt)) && knob->incrementState == 2) // wait for both lines to come back up
   {
     knob->incrementState = 0;
     knob->flag = INCREMENT;
-    //Serial.println("I Three");
   }
-
-  /* DELETE IF NOT USED 9/1/2022
-  if((*knob->in & (knob->clk)) && !(*knob->in & knob->dt)) // if clk is high and dt is low
-  {
-    while(!(*knob->in & knob->dt))
-    {
-       while(!(*knob->in & knob->clk))
-       {
-        // wait and do nothing
-       }
-    }
-    delay(10); // to try to prevent debouncing
-    knob->flag = INCREMENT;
-    //Serial.print("Increment: ");
-    //Serial.println(counter);
-  }
-  */
 }
 // SUMMARY: Checks if rotary knob was rotated in decremening direction. Flag is raised if it has been rotated. 
 void CheckDecrement(RotaryKnob* knob)
@@ -563,52 +545,22 @@ void CheckDecrement(RotaryKnob* knob)
   if(((*knob->in & (knob->dt)) && !(*knob->in & knob->clk)) && knob->decrementState == 0) // if dt is high and clock is low
   {
     knob->decrementState = 2; 
-    //Serial.println("D One");
   }
   delay(10); // to try to prevent debouncing
-  /* DELETE IF NOT USED 9/1/2022
-  if((!(*knob->in & knob->clk)) && knob->decrementState == 1)
-  {
-    knob->decrementState = 2;
-        Serial.println("D Two");
-  }*/
+  
   if(((*knob->in & (knob->dt)) && (*knob->in & knob->clk)) &&( knob->decrementState == 2))
   {
     knob->decrementState = 0;
     knob->flag = DECREMENT;
-    //Serial.println("D Three");
   }
-
-  /* DELETE IF NOT USED 9/1/2022
-  if((*knob->in & (knob->dt)) && !(*knob->in & knob->clk)) // if dt is high and clock is low
-  {
-    while(!(*knob->in & knob->clk))
-    {
-      while(!(*knob->in & knob->dt))
-      {
-        // wait and do nothing
-      }
-    }
-    delay(10); // to try to prevent debouncing
-    knob->flag = DECREMENT;
-    //Serial.print("Decrement: ");
-    //Serial.println(counter);
-  }  
-  */
 }
 // SUMMARY: It is passed a new BPM variable. We then calculate the frequency of that BPM, then we get the period 
 // length of that BPM value. We then set the clock's attributes to match these new updated values.
 void UpdateBPM(uint16_t newBPM, Clock* clockObj)
 {
-  // FIXME, make this update the clock's frequency and bpm varibles too while it is in here
   float freq = (float)((float)newBPM / 60.0)*2; // returns frequency of that BPM 
   clockObj->freqHz = freq/2; // for display purposes, seems to work, so I'll leave it
   clockObj->period = (int)((((float)1.0/freq)*1000.0));
-  //debug lines
-  //Serial.print("Hz");
-  //Serial.println(freq);
-  //Serial.print("ms");
-  //Serial.println(clockObj->period);
 }
 
 // SUMMARY: Updates clock's duty cycle based on clock object's duty cycle state.
@@ -620,39 +572,6 @@ void UpdateDutyCycle(Clock* clockObj)
 {
   clockObj->posDutyCycleDelay = (int)(((clockObj->period) * clockObj->dutyCycleValue + 0.5) * -1);
   clockObj->negDutyCycleDelay = (int)((clockObj->period) * clockObj->dutyCycleValue + 0.5);
-  /* DELETE IF NOT USED 9/5/2022
-  switch(clockObj->dutyCycle)
-  {
-    case(0):
-    {
-      clockObj->posDutyCycleDelay = (int)(((clockObj->period) * dutyCycleValue + 0.5) * -1);
-      clockObj->negDutyCycleDelay = (int)((clockObj->period) * dutyCycleValue + 0.5);
-      //Serial.println(clockObj->negDutyCycleDelay);
-      break;
-    }
-    case(1):
-    {
-      clockObj->posDutyCycleDelay = 0;
-      clockObj->negDutyCycleDelay = 0;
-      break;
-    }
-    case(2):
-    {
-      clockObj->posDutyCycleDelay = (int)((clockObj->period ) * dutyCycleValue + 0.5);
-      clockObj->negDutyCycleDelay = (int)(((clockObj->period) * dutyCycleValue + 0.5) * -1);
-      //Debug lines
-      //Serial.print("Period value: ");Serial.println(clockObj->period);
-      //Serial.print("Pos Delay: ");Serial.println(clockObj->posDutyCycleDelay);
-      //Serial.print("Neg Delay: ");Serial.println(clockObj->negDutyCycleDelay);
-      break;
-    }
-    default:
-    {
-      clockObj->dutyCycle = TwentyFive;
-      break;
-    }
-  }
-*/
 }
 // SUMMARY: Calculates a frequency based on a period of time in miliseconds
 float CalculateFrequency(uint32_t ms)
@@ -662,9 +581,11 @@ float CalculateFrequency(uint32_t ms)
   int roundedHertz = round(hertz);
   
   // Debug print lines
+  #ifdef debug
   Serial.print("Frequency calculated (HZ): ");
   Serial.print(hertz);
   Serial.print(" from the miliseconds value (ms) "); Serial.println(ms);
+  #endif  
   
   return hertz;
 }
@@ -680,7 +601,7 @@ uint32_t GetTimeSample(uint32_t sample)
   int avg = 0 ;
   return avg = (millis() - sample); // get second sample
 }
-//***************** DEAD FUNCTIONS *****************
+
 void SetTimerSettings()
 {
   // see ref https://create.arduino.cc/projecthub/dhorton668/pardon-me-for-interrupting-acbd1a
@@ -701,7 +622,9 @@ void SetTimerSettings()
   //*********************************************************************************
   uint16_t oscVal= 625;//3125 should be about 20 interrupts a second. 625 is about 100 interrupts a second
   OCR1A = oscVal;
+  #ifdef debug
   Serial.print("OCR1A Value: "); Serial.println(oscVal);
+  #endif
   // Reenable the interrupts 
   sei();
 }
@@ -740,7 +663,5 @@ ISR(TIMER1_COMPA_vect)
           break;
         }
       }
-   
-      //Serial.print("Made it in the pulse task, period interval is "); Serial.println(period); // debug line
    } 
 }
