@@ -67,7 +67,6 @@ typedef struct ClockObject
 {
     volatile uint8_t *port; 
     volatile uint8_t pin ;
-    //DutyCycleRatio dutyCycle; // delete if not used
     int posDutyCycleDelay;
     int negDutyCycleDelay ;
     float dutyCycleValue = 0.5; // this can be thought of a a ratio percentage. See update duty cycle function for deatils how to use this. 
@@ -78,7 +77,7 @@ typedef struct ClockObject
     uint16_t bpm;
 }Clock;
 
-Clock clock1;
+Clock clock1, clock2;
 
 // Global Variables
 uint32_t firstTimeSample = 0 ;
@@ -92,9 +91,14 @@ Adafruit_SSD1306 display(window.screenWidth, window.screenHeight, &Wire, window.
 unsigned char timerInterruptFlag = 0;
 uint32_t multiplier = 1;
 uint16_t timeoutValue = 3000; // in miliseconds
+
+// FIXME add these to clock object
 unsigned long time1 = millis();
-uint8_t pulseToggle = 0 ; // to sequency clock pulse
-int  delaybuffer = 0;
+unsigned long time2 = millis();
+uint8_t pulseToggle = 0 ; // to sequence clock1 pulse
+uint8_t pulseToggle2 = 0 ; // to sequence clock2 pulse
+int  delaybuffer = 0; // for clock1
+int  delaybuffer2 = 0; // for clock2
     
 // Prototypes
 uint32_t GetTimeSample(uint32_t sample);
@@ -137,10 +141,15 @@ void loop() {
     
     // Initialize Local Variables and Periphrials 
     // initialize struct
-    clock1.pin = (1<<5); // assign pin number
+    clock1.pin = (1<<5); // assign pin number pin 13 or PB5
     clock1.port = &PORTB; // assign port number
     
     clock1.period = 250; // BPM 120
+    
+    clock2.pin = (1<<4); // pin 12 or PB4
+    clock2.port = &PORTB;
+
+    clock2.period = 250;    
     
     // Application struct init
     Application app;
@@ -167,24 +176,28 @@ void loop() {
     PORTD |= 1 << 3; // Enabling Internal Pull Up on single pin PD3 with bit masking :
     DDRD &= ~(1<<3); // Configuring PD3 as Input
    
-    DDRB |= clock1.pin;  // PB5 output
+    DDRB |= (clock1.pin + clock2.pin);  // PB5 and PB4 clock out put mode
 
     // init values
     // Get Frequency 
     clock1.freqHz  = CalculateFrequency(clock1.period);
+
     // Calculate BPM 
     // we divid by 2 because this function is made for live sampling. Seems to work fine when we use it with the beat button, but when we manually use it like this it has problems.
-    clock1.bpm = CalculateBPM(clock1.freqHz/2);  
+    clock1.bpm = CalculateBPM(clock1.freqHz/2);      
+
     #ifdef debug
     Serial.print("BPM: ");
     Serial.println(clock1.bpm );  
     #endif
      window.refreshFlag = 1; // set value to 1 to enable refresh
      uint16_t refreshcounter = 0;
+
+
      while (1)
      {
        // Display refresh
-       if (refreshcounter >= 100)
+       if (refreshcounter >= 50)
        {
           UpdateWindow(&window,&app,&clock1);
           refreshcounter = 0;
@@ -450,7 +463,7 @@ void UpdateWindow(Window* win,Application* app,Clock* clk)
         display.drawLine(buffX, 10, buffX, display.height()-1, SSD1306_WHITE);
         display.drawLine(buffX, display.height()-1, 40, display.height()-1, SSD1306_WHITE); 
         display.drawLine(40, 10, 40, display.height()-1, SSD1306_WHITE);
-
+        // display stats
         display.print("        + Duty Cycle: \n          ");display.print(mappedValue * 100); display.print("%");
         display.display();
         break;
@@ -629,14 +642,20 @@ void SetTimerSettings()
   sei();
 }
 
+uint16_t divider = 8;
+uint16_t dividerCount = 0;
+uint16_t dividerCount2 = 0;
 // This ISR is in charge of pulsing our output clock pins. It schedules when each pin needs to be turn on or off depending 
 ISR(TIMER1_COMPA_vect)
 {
   // WARNING, it seems with arduino's 16MHZ CPU speed the smallest delay amount that we can set the 
   //OCR1A to is 24ms when the value is set to 1 ms
-
+  
+  clock2.period = clock1.period; // we want clock2 to be some kind of ratio dervied from clock 1.
+  
   if(millis() - time1 >= clock1.period  + (delaybuffer))// pulse 
   {
+      // update time variables
       time1 = millis();
       // hard code pin high and pin low using counter%2 ==  0 
       // so we can add small delay to the high if or the low else to adjust duty cycle
@@ -646,7 +665,13 @@ ISR(TIMER1_COMPA_vect)
         {
           *clock1.port |=  clock1.pin ;
           pulseToggle = 1;
-          delaybuffer = clock1.posDutyCycleDelay;
+          delaybuffer = clock1.posDutyCycleDelay;  
+          dividerCount++;
+          if(dividerCount >= divider ) 
+          {         
+            *clock2.port |= clock2.pin;
+            dividerCount = 0;
+          }
           break;
         }
       
@@ -655,6 +680,13 @@ ISR(TIMER1_COMPA_vect)
             *clock1.port &= ~ clock1.pin ;
             pulseToggle = 0;
             delaybuffer = clock1.negDutyCycleDelay;
+            dividerCount2++;
+            if(dividerCount2 >= divider ) 
+            {         
+              *clock2.port &= ~clock2.pin;
+              dividerCount2 = 0;
+            }
+
             break;
         }
         default:
@@ -663,5 +695,35 @@ ISR(TIMER1_COMPA_vect)
           break;
         }
       }
+
    } 
+    /*
+   if(millis() - time1 >= clock2.period  + (delaybuffer) )// pulse 
+   {
+     delay(3); // need to help offset two lines from coming out of phase
+     time2 = millis();
+     switch(pulseToggle2)
+     {
+       case(0):
+       {
+         *clock2.port |= clock2.pin;
+         pulseToggle2 = 1;
+         //delaybuffer2 = clock2.negDutyCycleDelay;
+         break;
+       }
+       case(1):
+       {  
+         *clock2.port &= ~clock2.pin;
+         pulseToggle2 = 0;
+         //delaybuffer2 = clock2.negDutyCycleDelay;
+         break;
+       }
+       default:
+       {
+         pulseToggle2 = 0;
+         break;
+       }   
+     }
+   }
+    */
 }
