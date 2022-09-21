@@ -87,6 +87,8 @@ unsigned char numOfTaps = 0;
 
 // DisplayGlobal Variables
 Adafruit_SSD1306 display(window.screenWidth, window.screenHeight, &Wire, window.OLEDReset);
+
+
 // Timer Global Settings
 unsigned char timerInterruptFlag = 0;
 uint32_t multiplier = 1;
@@ -431,13 +433,14 @@ void UpdateWindow(Window* win,Application* app,Clock* clk)
         display.setCursor(0, 0);     // Start at top-left corner
         display.cp437(true);         // Use full 256 char 'Code Page 437' font
       
+        uint16_t adjustedPeriod = clk->period *2;// FIXME, I think the real stats are doubled than the value being displayed
+        
         // Not all the characters will fit on the display. This is normal.
         // Library will draw what it can and the rest will be clipped.
         display.write("FREQUENCY CONTROL\n");
         display.write("BPM:             ");display.print(clk->bpm); display.print("\n");
-        display.write("Period(ms):      ");display.print(clk->period);display.print("\n");
-        display.write("Frequency(Hz):   ");display.print(clk->freqHz);
-      
+        display.write("Period(ms):      ");display.print(adjustedPeriod);display.print("\n"); 
+        display.write("Frequency(Hz):   ");display.print(clk->freqHz); 
         display.display();
         break;
       }
@@ -642,7 +645,7 @@ void SetTimerSettings()
   sei();
 }
 
-uint16_t divider = 4;
+uint16_t divider = 2;
 uint16_t dividerCount = 0;
 uint16_t dividerCount2 = 0;
 // This ISR is in charge of pulsing our output clock pins. It schedules when each pin needs to be turn on or off depending 
@@ -653,13 +656,13 @@ ISR(TIMER1_COMPA_vect)
   
   clock2.period = clock1.period; // we want clock2 to be some kind of ratio dervied from clock 1.
   //delaybuffer = delaybuffer/divider;
-  // FIXME: I feel like this approach is missing something. I do not want to rework the whole program to control clock 2. Rather What if we executed this task a 
+  // Note: I do not want to rework the whole program to control clock 2. Rather What if we executed this task a 
         //fraction of the time so we can toggle clock2 on and off and safe gaurd clock1 with an if statment. This way the tempo will keep its integrity and we still get a controllable gate clock. 
                 
         // We want to be able to say clock1.period = 250 ms and clock2. period = clock1.period/4. But to do this we need to execute, toggle and test these conditions more times than we toggle toggle our tempo clock (clock1). 
         // so we may need to redefine out schedule condition, take the period of clock 1 and execute task a fraction of that time period. Enabling us to sync and schedule both clock pulses with some ease.         
            
-  if(millis() - time1 >= (clock1.period  + (delaybuffer)-10)/divider)// pulse 
+  if(millis() - time1 >= (clock1.period  + (delaybuffer)-10)/divider)// pulse // Adding an offset of 10 to realign and compensate for delay caused by division, approx 10 ms. 
   {
       // update time variables
       time1 = millis();
