@@ -652,14 +652,14 @@ ISR(TIMER1_COMPA_vect)
   //OCR1A to is 24ms when the value is set to 1 ms
   
   clock2.period = clock1.period; // we want clock2 to be some kind of ratio dervied from clock 1.
-  
+  //delaybuffer = delaybuffer/divider;
   // FIXME: I feel like this approach is missing something. I do not want to rework the whole program to control clock 2. Rather What if we executed this task a 
         //fraction of the time so we can toggle clock2 on and off and safe gaurd clock1 with an if statment. This way the tempo will keep its integrity and we still get a controllable gate clock. 
                 
         // We want to be able to say clock1.period = 250 ms and clock2. period = clock1.period/4. But to do this we need to execute, toggle and test these conditions more times than we toggle toggle our tempo clock (clock1). 
         // so we may need to redefine out schedule condition, take the period of clock 1 and execute task a fraction of that time period. Enabling us to sync and schedule both clock pulses with some ease.         
            
-  if(millis() - time1 >= clock1.period  + (delaybuffer))// pulse 
+  if(millis() - time1 >= (clock1.period  + (delaybuffer)-10)/divider)// pulse 
   {
       // update time variables
       time1 = millis();
@@ -669,13 +669,13 @@ ISR(TIMER1_COMPA_vect)
       {
         case(0):
         {
-          *clock1.port |=  clock1.pin ;
+          *clock2.port |=  clock2.pin ;
           pulseToggle = 1;
           delaybuffer = clock1.posDutyCycleDelay;  
           dividerCount++;
           if(dividerCount >= divider ) 
           {         
-            *clock2.port |= clock2.pin;
+            *clock1.port |= clock1.pin;
             dividerCount = 0;
           }
           break;
@@ -683,13 +683,13 @@ ISR(TIMER1_COMPA_vect)
       
         case(1):
         {
-            *clock1.port &= ~ clock1.pin ;
+            *clock2.port &= ~ clock2.pin ;
             pulseToggle = 0;
             delaybuffer = clock1.negDutyCycleDelay;
             dividerCount2++;
             if(dividerCount2 >= divider ) 
             {         
-              *clock2.port &= ~clock2.pin;
+              *clock1.port &= ~clock1.pin;
               dividerCount2 = 0;
             }
 
