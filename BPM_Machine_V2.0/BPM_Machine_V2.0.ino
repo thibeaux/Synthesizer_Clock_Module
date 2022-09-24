@@ -21,15 +21,15 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
-// Definitions
+// Configurations for the application
 /* **** Uncomment debug definition to put into debug mode and activate print lines. This definition is to help optimize unnecessary code in production version **** */
-// #define debug 1 
+      //#define debug 1 
 /* ******************** */
 
 // State Machine
 //enum DutyCycleRatio{TwentyFive=0, Fifty=1,SeventyFive=2}; // These are estimates, can be fine tuned. Measured in percentagesEX: 25%,50%,75% // Delete if not used 9/5/2022
 enum RotaryEnocderFlag{NONE=0x00,INCREMENT=0x01,DECREMENT=0x02,SWITCH=0x04};
-enum ApplicationModes {FREQUENCY_CONTROL=0,DUTYCYCLE_CONTROL=1};
+enum ApplicationModes {FREQUENCY_CONTROL=0,DUTYCYCLE_CONTROL=1,GATE_CONTROL=2};
 
 // Structs
 typedef struct Window
@@ -84,6 +84,11 @@ uint32_t firstTimeSample = 0 ;
 uint32_t secondTimeSample = 0 ;
 uint32_t avgTime = 0;
 unsigned char numOfTaps = 0;
+
+  // Global variables for the ISR
+uint16_t divider = 5;
+uint16_t dividerCount = 0;
+uint16_t dividerCount2 = 0;
 
 // DisplayGlobal Variables
 Adafruit_SSD1306 display(window.screenWidth, window.screenHeight, &Wire, window.OLEDReset);
@@ -254,6 +259,17 @@ void loop() {
 
               break;
             }
+            case(GATE_CONTROL):
+            {
+              if(divider <= 16)
+              {
+                divider += 1;
+                #ifdef debug                
+                Serial.print("Gate Control Mode Decrement: "); Serial.println(divider);
+                #endif
+              }                
+              break;
+            }         
             default:
             {
               #ifdef debug
@@ -302,6 +318,17 @@ void loop() {
               }
               break;
             }
+            case(GATE_CONTROL):
+            {
+              if(divider > 0)
+              {
+                divider -= 1;
+                #ifdef debug                
+                Serial.print("Gate Control Mode Decrement: "); Serial.println(divider);
+                #endif
+              }
+              break;
+            }            
             default:
             {
               #ifdef debug
@@ -333,7 +360,16 @@ void loop() {
               Serial.println(app.appMode);
               #endif
               
+              app.appMode = GATE_CONTROL;
+              break;
+            }
+            case(GATE_CONTROL):
+            {
               app.appMode = FREQUENCY_CONTROL;
+              #ifdef debug
+              Serial.print("Gate Control Entered: ");
+              Serial.println(app.appMode);
+              #endif  
               break;
             }
             default:
@@ -469,6 +505,22 @@ void UpdateWindow(Window* win,Application* app,Clock* clk)
         // display stats
         display.print("        + Duty Cycle: \n          ");display.print(mappedValue * 100); display.print("%");
         display.display();
+        break;
+      }
+      case(GATE_CONTROL):
+      {
+        display.clearDisplay();
+  
+        display.setTextSize(1);      // Normal 1:1 pixel scale
+        display.setTextColor(SSD1306_WHITE); // Draw white text
+        display.setCursor(0, 0);     // Start at top-left corner
+        display.cp437(true);         // Use full 256 char 'Code Page 437' font
+
+        display.write("GATE SIGNAL CONTROL\n");
+        display.write("Beat Divistion Value: ");
+        display.println(divider);
+        
+        display.display();  
         break;
       }
       default:
@@ -645,9 +697,7 @@ void SetTimerSettings()
   sei();
 }
 
-uint16_t divider = 2;
-uint16_t dividerCount = 0;
-uint16_t dividerCount2 = 0;
+
 // This ISR is in charge of pulsing our output clock pins. It schedules when each pin needs to be turn on or off depending 
 ISR(TIMER1_COMPA_vect)
 {
@@ -706,33 +756,5 @@ ISR(TIMER1_COMPA_vect)
       }
 
    } 
-    /*
-   if(millis() - time1 >= clock2.period  + (delaybuffer) )// pulse 
-   {
-     delay(3); // need to help offset two lines from coming out of phase
-     time2 = millis();
-     switch(pulseToggle2)
-     {
-       case(0):
-       {
-         *clock2.port |= clock2.pin;
-         pulseToggle2 = 1;
-         //delaybuffer2 = clock2.negDutyCycleDelay;
-         break;
-       }
-       case(1):
-       {  
-         *clock2.port &= ~clock2.pin;
-         pulseToggle2 = 0;
-         //delaybuffer2 = clock2.negDutyCycleDelay;
-         break;
-       }
-       default:
-       {
-         pulseToggle2 = 0;
-         break;
-       }   
-     }
-   }
-    */
+    
 }
