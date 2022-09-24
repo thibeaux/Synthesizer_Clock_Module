@@ -86,7 +86,7 @@ uint32_t avgTime = 0;
 unsigned char numOfTaps = 0;
 
   // Global variables for the ISR
-uint16_t divider = 5;
+uint16_t divider = 2;
 uint16_t dividerCount = 0;
 uint16_t dividerCount2 = 0;
 
@@ -106,7 +106,8 @@ uint8_t pulseToggle = 0 ; // to sequence clock1 pulse
 uint8_t pulseToggle2 = 0 ; // to sequence clock2 pulse
 int  delaybuffer = 0; // for clock1
 int  delaybuffer2 = 0; // for clock2
-    
+int calculatedWaitPeriod = 0; uint8_t calculatedEnd =0;
+
 // Prototypes
 uint32_t GetTimeSample(uint32_t sample);
 float CalculateFrequency(uint32_t ms);
@@ -261,13 +262,10 @@ void loop() {
             }
             case(GATE_CONTROL):
             {
-              if(divider <= 16)
-              {
-                divider += 1;
-                #ifdef debug                
-                Serial.print("Gate Control Mode Decrement: "); Serial.println(divider);
-                #endif
-              }                
+              divider += 1;
+              #ifdef debug                
+              Serial.print("Gate Control Mode Decrement: "); Serial.println(divider);
+              #endif              
               break;
             }         
             default:
@@ -320,13 +318,10 @@ void loop() {
             }
             case(GATE_CONTROL):
             {
-              if(divider > 0)
-              {
-                divider -= 1;
-                #ifdef debug                
-                Serial.print("Gate Control Mode Decrement: "); Serial.println(divider);
-                #endif
-              }
+              divider -= 1;
+              #ifdef debug                
+              Serial.print("Gate Control Mode Decrement: "); Serial.println(divider);
+              #endif        
               break;
             }            
             default:
@@ -439,10 +434,10 @@ void loop() {
               numOfTaps = 0;
               firstTimeSample = 0;
               avgTime = 0;
-              startTimeout = false;
+              startTimeout = false;                     
            }
         }
-        
+
         
         // Goal is to prevent a button press hanging and ruining the user experiance. 
         //User must tap two times to set device frequency/BPM.
@@ -703,7 +698,29 @@ ISR(TIMER1_COMPA_vect)
 {
   // WARNING, it seems with arduino's 16MHZ CPU speed the smallest delay amount that we can set the 
   //OCR1A to is 24ms when the value is set to 1 ms
-  
+  if (divider < 0)
+  {
+    divider = 0;
+  }
+  else if(divider > 4)
+  {
+    divider = 4;
+  }
+  uint8_t offset = 0; // We are trying to compensate for the delay in scheduling due to the constant calculations and condition testing that needs to be performed in this ISR, it dirty but it works good enough. 
+  if(divider == 3)
+  {
+    offset = 3;
+  }
+  else if(divider == 4)
+  {
+    offset = 5;  
+  }
+  else
+  {
+    offset = 0;
+  }
+  calculatedEnd = (1<<divider);
+  calculatedWaitPeriod = ((clock1.period  + (delaybuffer)-14)>>divider) - offset;
   clock2.period = clock1.period; // we want clock2 to be some kind of ratio dervied from clock 1.
   //delaybuffer = delaybuffer/divider;
   // Note: I do not want to rework the whole program to control clock 2. Rather What if we executed this task a 
@@ -712,8 +729,12 @@ ISR(TIMER1_COMPA_vect)
         // We want to be able to say clock1.period = 250 ms and clock2. period = clock1.period/4. But to do this we need to execute, toggle and test these conditions more times than we toggle toggle our tempo clock (clock1). 
         // so we may need to redefine out schedule condition, take the period of clock 1 and execute task a fraction of that time period. Enabling us to sync and schedule both clock pulses with some ease.         
            
-  if(millis() - time1 >= (clock1.period  + (delaybuffer)-10)/divider)// pulse // Adding an offset of 10 to realign and compensate for delay caused by division, approx 10 ms. 
+  if(millis() - time1 >= calculatedWaitPeriod)// pulse // Adding an offset of 10 to realign and compensate for delay caused by division, approx 10 ms. 
   {
+      #ifdef debug
+      Serial.print("wait period after processing: ");
+      Serial.println(calculatedWaitPeriod);   
+      #endif        
       // update time variables
       time1 = millis();
       // hard code pin high and pin low using counter%2 ==  0 
@@ -726,10 +747,15 @@ ISR(TIMER1_COMPA_vect)
           pulseToggle = 1;
           delaybuffer = clock1.posDutyCycleDelay;  
           dividerCount++;
-          if(dividerCount >= divider ) 
-          {         
-            *clock1.port |= clock1.pin;
-            dividerCount = 0;
+          switch(dividerCount >= calculatedEnd ) 
+          {        
+            case(1):
+            { 
+              *clock1.port |= clock1.pin;
+              dividerCount = 0;
+              break;
+            }default:
+            {break;}
           }
           break;
         }
@@ -740,10 +766,16 @@ ISR(TIMER1_COMPA_vect)
             pulseToggle = 0;
             delaybuffer = clock1.negDutyCycleDelay;
             dividerCount2++;
-            if(dividerCount2 >= divider ) 
-            {         
-              *clock1.port &= ~clock1.pin;
-              dividerCount2 = 0;
+            switch(dividerCount2 >= calculatedEnd ) 
+            {     
+              case(1):
+              {    
+                *clock1.port &= ~clock1.pin;
+                dividerCount2 = 0;
+                break;
+              }
+              default:
+              {break;}
             }
 
             break;
