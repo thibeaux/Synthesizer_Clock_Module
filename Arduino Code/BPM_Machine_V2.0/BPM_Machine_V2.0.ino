@@ -21,15 +21,15 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
-// Definitions
+// Configurations for the application
 /* **** Uncomment debug definition to put into debug mode and activate print lines. This definition is to help optimize unnecessary code in production version **** */
-// #define debug 1 
+      //#define debug 1 
 /* ******************** */
 
 // State Machine
 //enum DutyCycleRatio{TwentyFive=0, Fifty=1,SeventyFive=2}; // These are estimates, can be fine tuned. Measured in percentagesEX: 25%,50%,75% // Delete if not used 9/5/2022
 enum RotaryEnocderFlag{NONE=0x00,INCREMENT=0x01,DECREMENT=0x02,SWITCH=0x04};
-enum ApplicationModes {FREQUENCY_CONTROL=0,DUTYCYCLE_CONTROL=1};
+enum ApplicationModes {FREQUENCY_CONTROL=0,DUTYCYCLE_CONTROL=1,GATE_CONTROL=2};
 
 // Structs
 typedef struct Window
@@ -67,7 +67,6 @@ typedef struct ClockObject
 {
     volatile uint8_t *port; 
     volatile uint8_t pin ;
-    //DutyCycleRatio dutyCycle; // delete if not used
     int posDutyCycleDelay;
     int negDutyCycleDelay ;
     float dutyCycleValue = 0.5; // this can be thought of a a ratio percentage. See update duty cycle function for deatils how to use this. 
@@ -78,7 +77,7 @@ typedef struct ClockObject
     uint16_t bpm;
 }Clock;
 
-Clock clock1;
+Clock clock1, clock2;
 
 // Global Variables
 uint32_t firstTimeSample = 0 ;
@@ -86,16 +85,29 @@ uint32_t secondTimeSample = 0 ;
 uint32_t avgTime = 0;
 unsigned char numOfTaps = 0;
 
+  // Global variables for the ISR
+uint16_t divider = 2;
+uint16_t dividerCount = 0;
+uint16_t dividerCount2 = 0;
+
 // DisplayGlobal Variables
 Adafruit_SSD1306 display(window.screenWidth, window.screenHeight, &Wire, window.OLEDReset);
+
+
 // Timer Global Settings
 unsigned char timerInterruptFlag = 0;
 uint32_t multiplier = 1;
 uint16_t timeoutValue = 3000; // in miliseconds
+
+// FIXME add these to clock object
 unsigned long time1 = millis();
-uint8_t pulseToggle = 0 ; // to sequency clock pulse
-int  delaybuffer = 0;
-    
+unsigned long time2 = millis();
+uint8_t pulseToggle = 0 ; // to sequence clock1 pulse
+uint8_t pulseToggle2 = 0 ; // to sequence clock2 pulse
+int  delaybuffer = 0; // for clock1
+int  delaybuffer2 = 0; // for clock2
+int calculatedWaitPeriod = 0; uint8_t calculatedEnd =0;
+
 // Prototypes
 uint32_t GetTimeSample(uint32_t sample);
 float CalculateFrequency(uint32_t ms);
@@ -137,10 +149,15 @@ void loop() {
     
     // Initialize Local Variables and Periphrials 
     // initialize struct
-    clock1.pin = (1<<5); // assign pin number
+    clock1.pin = (1<<5); // assign pin number pin 13 or PB5
     clock1.port = &PORTB; // assign port number
     
     clock1.period = 250; // BPM 120
+    
+    clock2.pin = (1<<4); // pin 12 or PB4
+    clock2.port = &PORTB;
+
+    clock2.period = 250;    
     
     // Application struct init
     Application app;
@@ -167,24 +184,28 @@ void loop() {
     PORTD |= 1 << 3; // Enabling Internal Pull Up on single pin PD3 with bit masking :
     DDRD &= ~(1<<3); // Configuring PD3 as Input
    
-    DDRB |= clock1.pin;  // PB5 output
+    DDRB |= (clock1.pin + clock2.pin);  // PB5 and PB4 clock out put mode
 
     // init values
     // Get Frequency 
     clock1.freqHz  = CalculateFrequency(clock1.period);
+
     // Calculate BPM 
     // we divid by 2 because this function is made for live sampling. Seems to work fine when we use it with the beat button, but when we manually use it like this it has problems.
-    clock1.bpm = CalculateBPM(clock1.freqHz/2);  
+    clock1.bpm = CalculateBPM(clock1.freqHz/2);      
+
     #ifdef debug
     Serial.print("BPM: ");
     Serial.println(clock1.bpm );  
     #endif
      window.refreshFlag = 1; // set value to 1 to enable refresh
      uint16_t refreshcounter = 0;
+
+
      while (1)
      {
        // Display refresh
-       if (refreshcounter >= 100)
+       if (refreshcounter >= 50)
        {
           UpdateWindow(&window,&app,&clock1);
           refreshcounter = 0;
@@ -239,6 +260,14 @@ void loop() {
 
               break;
             }
+            case(GATE_CONTROL):
+            {
+              divider += 1;
+              #ifdef debug                
+              Serial.print("Gate Control Mode Decrement: "); Serial.println(divider);
+              #endif              
+              break;
+            }         
             default:
             {
               #ifdef debug
@@ -287,6 +316,14 @@ void loop() {
               }
               break;
             }
+            case(GATE_CONTROL):
+            {
+              divider -= 1;
+              #ifdef debug                
+              Serial.print("Gate Control Mode Decrement: "); Serial.println(divider);
+              #endif        
+              break;
+            }            
             default:
             {
               #ifdef debug
@@ -318,7 +355,16 @@ void loop() {
               Serial.println(app.appMode);
               #endif
               
+              app.appMode = GATE_CONTROL;
+              break;
+            }
+            case(GATE_CONTROL):
+            {
               app.appMode = FREQUENCY_CONTROL;
+              #ifdef debug
+              Serial.print("Gate Control Entered: ");
+              Serial.println(app.appMode);
+              #endif  
               break;
             }
             default:
@@ -388,10 +434,10 @@ void loop() {
               numOfTaps = 0;
               firstTimeSample = 0;
               avgTime = 0;
-              startTimeout = false;
+              startTimeout = false;                     
            }
         }
-        
+
         
         // Goal is to prevent a button press hanging and ruining the user experiance. 
         //User must tap two times to set device frequency/BPM.
@@ -418,13 +464,14 @@ void UpdateWindow(Window* win,Application* app,Clock* clk)
         display.setCursor(0, 0);     // Start at top-left corner
         display.cp437(true);         // Use full 256 char 'Code Page 437' font
       
+        uint16_t adjustedPeriod = clk->period *2;// FIXME, I think the real stats are doubled than the value being displayed
+        
         // Not all the characters will fit on the display. This is normal.
         // Library will draw what it can and the rest will be clipped.
         display.write("FREQUENCY CONTROL\n");
         display.write("BPM:             ");display.print(clk->bpm); display.print("\n");
-        display.write("Period(ms):      ");display.print(clk->period);display.print("\n");
-        display.write("Frequency(Hz):   ");display.print(clk->freqHz);
-      
+        display.write("Period(ms):      ");display.print(adjustedPeriod);display.print("\n"); 
+        display.write("Frequency(Hz):   ");display.print(clk->freqHz); 
         display.display();
         break;
       }
@@ -450,9 +497,25 @@ void UpdateWindow(Window* win,Application* app,Clock* clk)
         display.drawLine(buffX, 10, buffX, display.height()-1, SSD1306_WHITE);
         display.drawLine(buffX, display.height()-1, 40, display.height()-1, SSD1306_WHITE); 
         display.drawLine(40, 10, 40, display.height()-1, SSD1306_WHITE);
-
+        // display stats
         display.print("        + Duty Cycle: \n          ");display.print(mappedValue * 100); display.print("%");
         display.display();
+        break;
+      }
+      case(GATE_CONTROL):
+      {
+        display.clearDisplay();
+  
+        display.setTextSize(1);      // Normal 1:1 pixel scale
+        display.setTextColor(SSD1306_WHITE); // Draw white text
+        display.setCursor(0, 0);     // Start at top-left corner
+        display.cp437(true);         // Use full 256 char 'Code Page 437' font
+
+        display.write("GATE SIGNAL CONTROL\n");
+        display.write("Beat Divistion Value: ");
+        display.println(divider);
+        
+        display.display();  
         break;
       }
       default:
@@ -629,14 +692,50 @@ void SetTimerSettings()
   sei();
 }
 
+
 // This ISR is in charge of pulsing our output clock pins. It schedules when each pin needs to be turn on or off depending 
 ISR(TIMER1_COMPA_vect)
 {
   // WARNING, it seems with arduino's 16MHZ CPU speed the smallest delay amount that we can set the 
   //OCR1A to is 24ms when the value is set to 1 ms
-
-  if(millis() - time1 >= clock1.period  + (delaybuffer))// pulse 
+  if (divider < 0)
   {
+    divider = 0;
+  }
+  else if(divider > 4)
+  {
+    divider = 4;
+  }
+  uint8_t offset = 0; // We are trying to compensate for the delay in scheduling due to the constant calculations and condition testing that needs to be performed in this ISR, it dirty but it works good enough. 
+  if(divider == 3)
+  {
+    offset = 3;
+  }
+  else if(divider == 4)
+  {
+    offset = 5;  
+  }
+  else
+  {
+    offset = 0;
+  }
+  calculatedEnd = (1<<divider);
+  calculatedWaitPeriod = ((clock1.period  + (delaybuffer)-14)>>divider) - offset;
+  clock2.period = clock1.period; // we want clock2 to be some kind of ratio dervied from clock 1.
+  //delaybuffer = delaybuffer/divider;
+  // Note: I do not want to rework the whole program to control clock 2. Rather What if we executed this task a 
+        //fraction of the time so we can toggle clock2 on and off and safe gaurd clock1 with an if statment. This way the tempo will keep its integrity and we still get a controllable gate clock. 
+                
+        // We want to be able to say clock1.period = 250 ms and clock2. period = clock1.period/4. But to do this we need to execute, toggle and test these conditions more times than we toggle toggle our tempo clock (clock1). 
+        // so we may need to redefine out schedule condition, take the period of clock 1 and execute task a fraction of that time period. Enabling us to sync and schedule both clock pulses with some ease.         
+           
+  if(millis() - time1 >= calculatedWaitPeriod)// pulse // Adding an offset of 10 to realign and compensate for delay caused by division, approx 10 ms. 
+  {
+      #ifdef debug
+      Serial.print("wait period after processing: ");
+      Serial.println(calculatedWaitPeriod);   
+      #endif        
+      // update time variables
       time1 = millis();
       // hard code pin high and pin low using counter%2 ==  0 
       // so we can add small delay to the high if or the low else to adjust duty cycle
@@ -644,17 +743,41 @@ ISR(TIMER1_COMPA_vect)
       {
         case(0):
         {
-          *clock1.port |=  clock1.pin ;
+          *clock2.port |=  clock2.pin ;
           pulseToggle = 1;
-          delaybuffer = clock1.posDutyCycleDelay;
+          delaybuffer = clock1.posDutyCycleDelay;  
+          dividerCount++;
+          switch(dividerCount >= calculatedEnd ) 
+          {        
+            case(1):
+            { 
+              *clock1.port |= clock1.pin;
+              dividerCount = 0;
+              break;
+            }default:
+            {break;}
+          }
           break;
         }
       
         case(1):
         {
-            *clock1.port &= ~ clock1.pin ;
+            *clock2.port &= ~ clock2.pin ;
             pulseToggle = 0;
             delaybuffer = clock1.negDutyCycleDelay;
+            dividerCount2++;
+            switch(dividerCount2 >= calculatedEnd ) 
+            {     
+              case(1):
+              {    
+                *clock1.port &= ~clock1.pin;
+                dividerCount2 = 0;
+                break;
+              }
+              default:
+              {break;}
+            }
+
             break;
         }
         default:
@@ -663,5 +786,7 @@ ISR(TIMER1_COMPA_vect)
           break;
         }
       }
+
    } 
+    
 }
