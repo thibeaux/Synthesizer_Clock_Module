@@ -5,4 +5,5 @@
  *      Author: Brandon Thibeaux
  */
 
-
+#include "Rotary_Encoder.h"
+#include "Structures.h"

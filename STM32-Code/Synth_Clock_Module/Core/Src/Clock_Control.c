@@ -6,3 +6,4 @@
  */
 
 #include "Clock_Control.h"
+#include "Structures.h"
