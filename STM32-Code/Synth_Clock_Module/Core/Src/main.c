@@ -20,12 +20,18 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "i2c.h"
+#include "tim.h"
+#include "usart.h"
+#include "gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "ssd1306.h"
 #include "ssd1306_tests.h"
 #include <stdbool.h>
+#include "Globals.h"
+#include "Structures.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -43,11 +49,6 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
- I2C_HandleTypeDef hi2c2;
-
-TIM_HandleTypeDef htim2;
-
-UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
 
@@ -55,10 +56,6 @@ UART_HandleTypeDef huart2;
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
-static void MX_GPIO_Init(void);
-static void MX_USART2_UART_Init(void);
-static void MX_I2C2_Init(void);
-static void MX_TIM2_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -84,6 +81,31 @@ int main(void)
   HAL_Init();
 
   /* USER CODE BEGIN Init */
+  // init variables
+  uint8_t bpmButton = 0;
+  unsigned char toggleButton = 0 ; // make sure code executes on falling edge
+  unsigned long timeoutCount ; // in miliseconds to reset tap count
+  bool startTimeout = false;
+
+
+  // init clock objects
+  uint32_t last_tick = 0;
+  last_tick = HAL_GetTick();
+  time1 = HAL_GetTick();
+  time2 = HAL_GetTick();
+
+  clock1.pin = Clock_Pulse_Pin;
+  clock1.port = GPIOB; // assign port number
+
+  clock1.period = 250; // BPM 120
+
+  clock2.pin = Gate_Pulse_Pin;
+  clock2.port = GPIOB;
+
+  clock2.period = 250;
+
+  // init rotary encoder
+
 
   /* USER CODE END Init */
 
@@ -100,8 +122,9 @@ int main(void)
   MX_I2C2_Init();
   MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
-  uint32_t last_tick = 0;
-  last_tick = HAL_GetTick();
+
+
+// Start Clock Pulse Timer ISR
   HAL_TIM_Base_Start_IT(&htim2);
   /* USER CODE END 2 */
 
@@ -111,7 +134,7 @@ int main(void)
   {
 	  if(HAL_GetTick()>last_tick+300)
 	  {
-		  HAL_GPIO_TogglePin(GPIOB, Clock_Pulse_Pin);
+//		  HAL_GPIO_TogglePin(GPIOB, Clock_Pulse_Pin);
 
 		  last_tick = HAL_GetTick();
 	  }
@@ -170,186 +193,107 @@ void SystemClock_Config(void)
   }
 }
 
-/**
-  * @brief I2C2 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_I2C2_Init(void)
-{
-
-  /* USER CODE BEGIN I2C2_Init 0 */
-
-  /* USER CODE END I2C2_Init 0 */
-
-  /* USER CODE BEGIN I2C2_Init 1 */
-
-  /* USER CODE END I2C2_Init 1 */
-  hi2c2.Instance = I2C2;
-  hi2c2.Init.Timing = 0x10707DBC;
-  hi2c2.Init.OwnAddress1 = 0;
-  hi2c2.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
-  hi2c2.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
-  hi2c2.Init.OwnAddress2 = 0;
-  hi2c2.Init.OwnAddress2Masks = I2C_OA2_NOMASK;
-  hi2c2.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
-  hi2c2.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
-  if (HAL_I2C_Init(&hi2c2) != HAL_OK)
-  {
-    Error_Handler();
-  }
-
-  /** Configure Analogue filter
-  */
-  if (HAL_I2CEx_ConfigAnalogFilter(&hi2c2, I2C_ANALOGFILTER_ENABLE) != HAL_OK)
-  {
-    Error_Handler();
-  }
-
-  /** Configure Digital filter
-  */
-  if (HAL_I2CEx_ConfigDigitalFilter(&hi2c2, 0) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN I2C2_Init 2 */
-
-  /* USER CODE END I2C2_Init 2 */
-
-}
-
-/**
-  * @brief TIM2 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_TIM2_Init(void)
-{
-
-  /* USER CODE BEGIN TIM2_Init 0 */
-
-  /* USER CODE END TIM2_Init 0 */
-
-  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
-  TIM_MasterConfigTypeDef sMasterConfig = {0};
-
-  /* USER CODE BEGIN TIM2_Init 1 */
-
-  /* USER CODE END TIM2_Init 1 */
-  htim2.Instance = TIM2;
-  htim2.Init.Prescaler = 0;
-  htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim2.Init.Period = 1000;
-  htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-  htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
-  if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
-  if (HAL_TIM_ConfigClockSource(&htim2, &sClockSourceConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
-  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
-  if (HAL_TIMEx_MasterConfigSynchronization(&htim2, &sMasterConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN TIM2_Init 2 */
-
-  /* USER CODE END TIM2_Init 2 */
-
-}
-
-/**
-  * @brief USART2 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_USART2_UART_Init(void)
-{
-
-  /* USER CODE BEGIN USART2_Init 0 */
-
-  /* USER CODE END USART2_Init 0 */
-
-  /* USER CODE BEGIN USART2_Init 1 */
-
-  /* USER CODE END USART2_Init 1 */
-  huart2.Instance = USART2;
-  huart2.Init.BaudRate = 115200;
-  huart2.Init.WordLength = UART_WORDLENGTH_7B;
-  huart2.Init.StopBits = UART_STOPBITS_1;
-  huart2.Init.Parity = UART_PARITY_NONE;
-  huart2.Init.Mode = UART_MODE_TX_RX;
-  huart2.Init.HwFlowCtl = UART_HWCONTROL_NONE;
-  huart2.Init.OverSampling = UART_OVERSAMPLING_16;
-  huart2.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
-  huart2.Init.ClockPrescaler = UART_PRESCALER_DIV1;
-  huart2.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
-  if (HAL_UART_Init(&huart2) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN USART2_Init 2 */
-
-  /* USER CODE END USART2_Init 2 */
-
-}
-
-/**
-  * @brief GPIO Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_GPIO_Init(void)
-{
-  GPIO_InitTypeDef GPIO_InitStruct = {0};
-
-  /* GPIO Ports Clock Enable */
-  __HAL_RCC_GPIOC_CLK_ENABLE();
-  __HAL_RCC_GPIOF_CLK_ENABLE();
-  __HAL_RCC_GPIOA_CLK_ENABLE();
-  __HAL_RCC_GPIOB_CLK_ENABLE();
-
-  /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, Clock_Pulse_Pin|Gate_Pulse_Pin, GPIO_PIN_RESET);
-
-  /*Configure GPIO pin : T_NRST_Pin */
-  GPIO_InitStruct.Pin = T_NRST_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(T_NRST_GPIO_Port, &GPIO_InitStruct);
-
-  /*Configure GPIO pins : Rotary_Clock_Pin Tempo_Button_Pin */
-  GPIO_InitStruct.Pin = Rotary_Clock_Pin|Tempo_Button_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-
-  /*Configure GPIO pins : Rotary_DT_Pin Rotary_Button_Pin */
-  GPIO_InitStruct.Pin = Rotary_DT_Pin|Rotary_Button_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-
-  /*Configure GPIO pins : Clock_Pulse_Pin Gate_Pulse_Pin */
-  GPIO_InitStruct.Pin = Clock_Pulse_Pin|Gate_Pulse_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-
-}
-
 /* USER CODE BEGIN 4 */
+// This ISR is in charge of pulsing our output clock pins. It schedules when each pin needs to be turn on or off depending
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
-//	if(&htim == htim14)
+	if(htim == &htim2)
 	{
-		  HAL_GPIO_TogglePin(GPIOB, Gate_Pulse_Pin);
+
+		if (divider < 0)
+		{
+			divider = 0;
+		}
+		else if(divider > 4)
+		{
+			divider = 4;
+		}
+		// Evaluation not needed for STM32 so far
+//		uint8_t offset = 0; // We are trying to compensate for the delay in scheduling due to the constant calculations and condition testing that needs to be performed in this ISR, it dirty but it works good enough.
+//		if(divider == 3)
+//		{
+//			offset = 3;
+//		}
+//		else if(divider == 4)
+//		{
+//			offset = 5;
+//		}
+//		else
+//		{
+//			offset = 0;
+//		}
+		calculatedEnd = (1<<divider);
+		calculatedWaitPeriod = ((clock1.period  + (delaybuffer))>>divider) ;//- offset;
+		clock2.period = clock1.period; // we want clock2 to be some kind of ratio dervied from clock 1.
+
+		//delaybuffer = delaybuffer/divider;
+		// Note: I do not want to rework the whole program to control clock 2. Rather What if we executed this task a
+			//fraction of the time so we can toggle clock2 on and off and safe gaurd clock1 with an if statment. This way the tempo will keep its integrity and we still get a controllable gate clock.
+
+			// We want to be able to say clock1.period = 250 ms and clock2. period = clock1.period/4. But to do this we need to execute, toggle and test these conditions more times than we toggle toggle our tempo clock (clock1).
+			// so we may need to redefine out schedule condition, take the period of clock 1 and execute task a fraction of that time period. Enabling us to sync and schedule both clock pulses with some ease.
+
+		if(HAL_GetTick() - time1 >= calculatedWaitPeriod)// pulse // Adding an offset of 10 to realign and compensate for delay caused by division, approx 10 ms.
+		{
+		  #ifdef debug
+		  Serial.print("wait period after processing: ");
+		  Serial.println(calculatedWaitPeriod);
+		  #endif
+
+		  // update time variables
+		  time1 = HAL_GetTick();
+		  // hard code pin high and pin low using counter%2 ==  0
+		  // so we can add small delay to the high if or the low else to adjust duty cycle
+		  switch(pulseToggle)
+		  {
+			case(0):
+			{
+			  HAL_GPIO_WritePin(clock2.port, clock2.pin, 1) ;
+			  pulseToggle = 1;
+			  delaybuffer = clock1.posDutyCycleDelay;
+			  dividerCount++;
+			  switch(dividerCount >= calculatedEnd )
+			  {
+				case(1):
+				{
+					HAL_GPIO_WritePin(clock1.port, clock1.pin, 1) ;
+				  dividerCount = 0;
+				  break;
+				}default:
+				{break;}
+			  }
+			  break;
+			}
+
+			case(1):
+			{
+				HAL_GPIO_WritePin(clock2.port, clock2.pin, 0) ;
+				pulseToggle = 0;
+				delaybuffer = clock1.negDutyCycleDelay;
+				dividerCount2++;
+				switch(dividerCount2 >= calculatedEnd )
+				{
+				  case(1):
+				  {
+					  HAL_GPIO_WritePin(clock1.port, clock1.pin, 0) ;
+					dividerCount2 = 0;
+					break;
+				  }
+				  default:
+				  {break;}
+				}
+
+				break;
+			}
+			default:
+			{
+			  pulseToggle = 0;
+			  break;
+			}
+		  }
+
+		}
+
 	}
 }
 /* USER CODE END 4 */
