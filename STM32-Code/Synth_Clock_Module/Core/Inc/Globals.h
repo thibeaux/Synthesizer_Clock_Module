@@ -16,7 +16,7 @@ uint32_t avgTime = 0;
 unsigned char numOfTaps = 0;
 
 // Global variables for the ISR
-uint16_t divider = 3;
+uint16_t divider =1;
 uint16_t dividerCount = 0;
 uint16_t dividerCount2 = 0;
 
@@ -38,4 +38,5 @@ int  delaybuffer = 0; // for clock1
 int  delaybuffer2 = 0; // for clock2
 int calculatedWaitPeriod = 0; uint8_t calculatedEnd =0;
 Clock clock1, clock2;
+TempoButton tempoButton;
 #endif /* INC_GLOBALS_H_ */

@@ -57,12 +57,13 @@
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
-
+void Tempo_Button(uint16_t GPIO_Pin);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
+uint16_t tempButtonTimeout = 3000; // ms
+uint32_t last_tick = 0;
 /* USER CODE END 0 */
 
 /**
@@ -89,7 +90,6 @@ int main(void)
 
 
   // init clock objects
-  uint32_t last_tick = 0;
   last_tick = HAL_GetTick();
   time1 = HAL_GetTick();
   time2 = HAL_GetTick();
@@ -106,6 +106,11 @@ int main(void)
 
   // init rotary encoder
 
+  // init tempo button
+  tempoButton.button.buttonState = IDLE;
+  tempoButton.button.port = Tempo_Button_GPIO_Port;
+  tempoButton.button.pin = Tempo_Button_Pin;
+  tempoButton.tap_count = 0;
 
   /* USER CODE END Init */
 
@@ -126,6 +131,7 @@ int main(void)
 
 // Start Clock Pulse Timer ISR
   HAL_TIM_Base_Start_IT(&htim2);
+//  HAL_GPIO_EXTI_IRQHandler(Tempo_Button_Pin);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -134,7 +140,6 @@ int main(void)
   {
 	  if(HAL_GetTick()>last_tick+300)
 	  {
-//		  HAL_GPIO_TogglePin(GPIOB, Clock_Pulse_Pin);
 
 		  last_tick = HAL_GetTick();
 	  }
@@ -194,6 +199,23 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
+void Tempo_Button(uint16_t GPIO_Pin)
+{
+	if(GPIO_Pin == Tempo_Button_Pin)
+	{
+		// load data
+		tempoButton.tap_count++;
+
+		// reset data after timout reached
+		if(HAL_GetTick()>last_tick+tempButtonTimeout) // after a few seconds stop recording
+		{
+			tempoButton.tap_count = 0;
+			last_tick = HAL_GetTick();
+		}
+
+	}
+}
+
 // This ISR is in charge of pulsing our output clock pins. It schedules when each pin needs to be turn on or off depending
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
@@ -212,7 +234,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 		uint8_t offset = 0; // We are trying to compensate for the delay in scheduling due to the constant calculations and condition testing that needs to be performed in this ISR, it dirty but it works good enough.
 		if(divider == 3)
 		{
-			offset = 3;
+			offset = 1;
 		}
 		else if(divider == 4)
 		{
@@ -220,7 +242,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 		}
 		else
 		{
-			offset = -1;
+			offset = 0;
 		}
 		calculatedEnd = (1<<divider);
 		calculatedWaitPeriod = ((clock1.period  + (delaybuffer))>>divider) + offset;
@@ -295,6 +317,13 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 		}
 
 	}
+}
+void print(uint8_t* msg)
+{
+	uint8_t data[] = "msg";
+
+	HAL_UART_Transmit (&huart2, data, sizeof (data), 10);
+
 }
 /* USER CODE END 4 */
 

@@ -18,9 +18,16 @@
 //enum DutyCycleRatio{TwentyFive=0, Fifty=1,SeventyFive=2}; // These are estimates, can be fine tuned. Measured in percentagesEX: 25%,50%,75% // Delete if not used 9/5/2022
 enum RotaryEnocderFlag{NONE=0x00,INCREMENT=0x01,DECREMENT=0x02,SWITCH=0x04};
 enum ApplicationModes {FREQUENCY_CONTROL=0,DUTYCYCLE_CONTROL=1,GATE_CONTROL=2};
-
+enum ButtonState {IDLE = 0, PRESSED = 1, RELEASED = 2};
 
 // Structs
+typedef struct ButtonObject // template
+{
+	GPIO_TypeDef *port;
+	volatile uint8_t pin ;
+	volatile enum ButtonState buttonState;
+}Button;
+
 typedef struct Window
 {
   const uint8_t screenWidth ;//= 128;
@@ -42,11 +49,11 @@ typedef struct RotaryKnob
     enum RotaryEnocderFlag flag;
     GPIO_TypeDef *port;
     volatile uint16_t *in;
-    volatile uint8_t sw;
+    volatile uint8_t sw; // for legacy purposes, move away from this.
     volatile uint8_t dt;
     volatile uint8_t clk;
 
-    volatile bool buttonState;
+    volatile bool buttonState; // legacy code, integrate abstract struct Button into this
     volatile int incrementState;
     volatile int decrementState;
 }RotaryKnob;
@@ -68,5 +75,13 @@ typedef struct ClockObject
 }Clock;
 
 //Clock clock1, clock2;// delete this if not used 1/2/2023
+
+typedef struct TempoButton
+{
+	volatile Button button;
+	volatile uint8_t tap_count;
+}TempoButton;
+
+
 
 #endif /* INC_STRUCTURES_H_ */

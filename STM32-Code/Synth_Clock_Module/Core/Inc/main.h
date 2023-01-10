@@ -67,6 +67,7 @@ void Error_Handler(void);
 #define Rotary_Clock_GPIO_Port GPIOB
 #define Tempo_Button_Pin GPIO_PIN_1
 #define Tempo_Button_GPIO_Port GPIOB
+#define Tempo_Button_EXTI_IRQn EXTI0_1_IRQn
 #define Rotary_DT_Pin GPIO_PIN_9
 #define Rotary_DT_GPIO_Port GPIOA
 #define Rotary_Button_Pin GPIO_PIN_10

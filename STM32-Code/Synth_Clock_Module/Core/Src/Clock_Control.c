@@ -35,7 +35,7 @@ float CalculateFrequency(uint32_t ms)
 {
   float hertz; // we use floats temporarily for precision
   hertz = (float)((float)(1/(float)(ms)*1000)/2);
-  int roundedHertz = round(hertz);
+//  int roundedHertz = round(hertz); // if needed
 
   // Debug print lines
   #ifdef debug
