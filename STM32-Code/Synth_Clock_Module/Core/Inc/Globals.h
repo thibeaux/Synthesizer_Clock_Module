@@ -16,7 +16,7 @@ uint32_t avgTime = 0;
 unsigned char numOfTaps = 0;
 
 // Global variables for the ISR
-uint16_t divider = 2;
+uint16_t divider = 3;
 uint16_t dividerCount = 0;
 uint16_t dividerCount2 = 0;
 

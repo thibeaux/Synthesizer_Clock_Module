@@ -208,22 +208,22 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 		{
 			divider = 4;
 		}
-		// Evaluation not needed for STM32 so far
-//		uint8_t offset = 0; // We are trying to compensate for the delay in scheduling due to the constant calculations and condition testing that needs to be performed in this ISR, it dirty but it works good enough.
-//		if(divider == 3)
-//		{
-//			offset = 3;
-//		}
-//		else if(divider == 4)
-//		{
-//			offset = 5;
-//		}
-//		else
-//		{
-//			offset = 0;
-//		}
+
+		uint8_t offset = 0; // We are trying to compensate for the delay in scheduling due to the constant calculations and condition testing that needs to be performed in this ISR, it dirty but it works good enough.
+		if(divider == 3)
+		{
+			offset = 3;
+		}
+		else if(divider == 4)
+		{
+			offset = 1;
+		}
+		else
+		{
+			offset = -1;
+		}
 		calculatedEnd = (1<<divider);
-		calculatedWaitPeriod = ((clock1.period  + (delaybuffer))>>divider) ;//- offset;
+		calculatedWaitPeriod = ((clock1.period  + (delaybuffer))>>divider) + offset;
 		clock2.period = clock1.period; // we want clock2 to be some kind of ratio dervied from clock 1.
 
 		//delaybuffer = delaybuffer/divider;
