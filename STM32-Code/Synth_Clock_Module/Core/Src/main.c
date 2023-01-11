@@ -58,6 +58,7 @@
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
 void Tempo_Button(uint16_t GPIO_Pin);
+void print();
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -138,9 +139,9 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  if(HAL_GetTick()>last_tick+300)
+	  if(HAL_GetTick()>last_tick+3000)
 	  {
-
+		  tempoButton.tap_count = 0;
 		  last_tick = HAL_GetTick();
 	  }
 
@@ -205,14 +206,7 @@ void Tempo_Button(uint16_t GPIO_Pin)
 	{
 		// load data
 		tempoButton.tap_count++;
-
-		// reset data after timout reached
-		if(HAL_GetTick()>last_tick+tempButtonTimeout) // after a few seconds stop recording
-		{
-			tempoButton.tap_count = 0;
-			last_tick = HAL_GetTick();
-		}
-
+		print();
 	}
 }
 
@@ -318,11 +312,11 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 
 	}
 }
-void print(uint8_t* msg)
+void print()
 {
-	uint8_t data[] = "msg";
+	uint8_t data[] = "msg\r";
 
-	HAL_UART_Transmit (&huart2, data, sizeof (data), 10);
+	HAL_UART_Transmit(&huart2, data, sizeof(data)/sizeof(uint8_t), 100);
 
 }
 /* USER CODE END 4 */
