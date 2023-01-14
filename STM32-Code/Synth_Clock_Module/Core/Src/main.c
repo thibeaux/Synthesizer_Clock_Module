@@ -24,6 +24,7 @@
 #include "tim.h"
 #include "usart.h"
 #include "gpio.h"
+#include "App_Config.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -45,7 +46,7 @@
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
-
+#define DEBUG_BUFFER_SIZE 100
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
@@ -63,6 +64,9 @@ void print();
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
+uint8_t DEBUG_PRINT_BUFFER[DEBUG_BUFFER_SIZE];
+
 uint16_t tempButtonTimeout = 3000; // ms
 uint32_t last_tick = 0;
 /* USER CODE END 0 */
@@ -108,7 +112,7 @@ int main(void)
   // init rotary encoder
 
   // init tempo button
-  tempoButton.button.buttonState = IDLE;
+  tempoButton.button.buttonState = RELEASED;
   tempoButton.button.port = Tempo_Button_GPIO_Port;
   tempoButton.button.pin = Tempo_Button_Pin;
   tempoButton.tap_count = 0;
@@ -149,6 +153,8 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+	  //clean up
+	  tempoButton.button.buttonState = RELEASED;
   }
   /* USER CODE END 3 */
 }
@@ -201,12 +207,19 @@ void SystemClock_Config(void)
 
 /* USER CODE BEGIN 4 */
 void Tempo_Button(uint16_t GPIO_Pin)
+{}
+void HAL_GPIO_EXTI_Falling_Callback(uint16_t GPIO_Pin)
 {
-	if(GPIO_Pin == Tempo_Button_Pin)
+	if(GPIO_Pin == Tempo_Button_Pin && tempoButton.button.buttonState == RELEASED)
 	{
 		// load data
+		tempoButton.button.buttonState = PRESSED;
 		tempoButton.tap_count++;
-		print();
+
+#ifdef TempoISR_DEBUG
+		sprintf(DEBUG_PRINT_BUFFER,"Tempo Button pressed. tap count: %d\r",tempoButton.tap_count);
+		print(DEBUG_PRINT_BUFFER,DEBUG_BUFFER_SIZE);
+#endif
 	}
 }
 
@@ -312,11 +325,9 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 
 	}
 }
-void print()
+void print(uint8_t* data, size_t size)
 {
-	uint8_t data[] = "msg\r";
-
-	HAL_UART_Transmit(&huart2, data, sizeof(data)/sizeof(uint8_t), 100);
+	HAL_UART_Transmit(&huart2, data,size, 100);
 
 }
 /* USER CODE END 4 */

@@ -18,7 +18,7 @@
 //enum DutyCycleRatio{TwentyFive=0, Fifty=1,SeventyFive=2}; // These are estimates, can be fine tuned. Measured in percentagesEX: 25%,50%,75% // Delete if not used 9/5/2022
 enum RotaryEnocderFlag{NONE=0x00,INCREMENT=0x01,DECREMENT=0x02,SWITCH=0x04};
 enum ApplicationModes {FREQUENCY_CONTROL=0,DUTYCYCLE_CONTROL=1,GATE_CONTROL=2};
-enum ButtonState {IDLE = 0, PRESSED = 1, RELEASED = 2};
+enum ButtonState {RELEASED = 0, PRESSED = 1};
 
 // Structs
 typedef struct ButtonObject // template
