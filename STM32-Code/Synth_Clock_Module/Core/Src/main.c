@@ -24,7 +24,6 @@
 #include "tim.h"
 #include "usart.h"
 #include "gpio.h"
-#include "App_Config.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -33,6 +32,7 @@
 #include <stdbool.h>
 #include "Globals.h"
 #include "Structures.h"
+#include "App_Config.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -67,7 +67,6 @@ void print();
 
 uint8_t DEBUG_PRINT_BUFFER[DEBUG_BUFFER_SIZE];
 
-uint16_t tempButtonTimeout = 3000; // ms
 uint32_t last_tick = 0;
 /* USER CODE END 0 */
 
@@ -116,6 +115,8 @@ int main(void)
   tempoButton.button.port = Tempo_Button_GPIO_Port;
   tempoButton.button.pin = Tempo_Button_Pin;
   tempoButton.tap_count = 0;
+  tempoButton.tap_interval_buffer_size = 4;
+  tempoButton.tap_intervals[tempoButton.tap_interval_buffer_size];
 
   /* USER CODE END Init */
 
@@ -143,18 +144,47 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  if(HAL_GetTick()>last_tick+3000)
+
+
+// TEMPO BUTTON CODE
+	  if((HAL_GetTick()>(last_tick+timeoutValue)) && (tempoButton.tap_count>0))
 	  {
 		  tempoButton.tap_count = 0;
-		  last_tick = HAL_GetTick();
+#ifdef TempoISR_DEBUG
+			  sprintf(DEBUG_PRINT_BUFFER,"****************************\r\n");
+			  print(DEBUG_PRINT_BUFFER,DEBUG_BUFFER_SIZE);
+#endif
 	  }
 
+	  // Tempo Button Logic if pressed
+	  GPIO_PinState buttonRead = HAL_GPIO_ReadPin(tempoButton.button.port, tempoButton.button.port);
+	  if(tempoButton.button.buttonState == PRESSED && buttonRead ==  GPIO_PIN_RESET )
+	  {
+#ifdef TempoISR_DEBUG
+		  sprintf(DEBUG_PRINT_BUFFER,"* Tempo Button released. tap count: %d\r\n",tempoButton.tap_count);
+		  print(DEBUG_PRINT_BUFFER,DEBUG_BUFFER_SIZE);
+#endif
 
+		  // if we have more than 1 sample, do this
+		  if(tempoButton.tap_count > 0)
+		  {
+			  tempoButton.tap_intervals[(tempoButton.tap_count % tempoButton.tap_interval_buffer_size)] = HAL_GetTick() - last_tick;
+#ifdef TempoISR_DEBUG
+			  sprintf(DEBUG_PRINT_BUFFER,"* Time interval: %d\r\n",tempoButton.tap_intervals[(tempoButton.tap_count % tempoButton.tap_interval_buffer_size)]);
+			  print(DEBUG_PRINT_BUFFER,DEBUG_BUFFER_SIZE);
+#endif
+		  }
+		  tempoButton.tap_count++;
+		  last_tick = HAL_GetTick();
+
+
+	  }
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
 	  //clean up
 	  tempoButton.button.buttonState = RELEASED;
+
   }
   /* USER CODE END 3 */
 }
@@ -206,20 +236,30 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
-void Tempo_Button(uint16_t GPIO_Pin)
-{}
+//void Tempo_Button(uint16_t GPIO_Pin)
+//{}
+//void HAL_GPIO_EXTI_Rising_Callback(uint16_t GPIO_Pin)
+//{
+//	GPIO_PinState buttonRead = HAL_GPIO_ReadPin(tempoButton.button.port, tempoButton.button.port);
+//	if(GPIO_Pin == Tempo_Button_Pin && tempoButton.button.buttonState == PRESSED)
+//	{
+//		tempoButton.tap_count++;
+//		tempoButton.button.buttonState = RELEASED;
+//
+//#ifdef TempoISR_DEBUG
+//		sprintf(DEBUG_PRINT_BUFFER,"Tempo Button released. tap count: %d, button state:, %d\r",tempoButton.tap_count,buttonRead);
+//		print(DEBUG_PRINT_BUFFER,DEBUG_BUFFER_SIZE);
+//#endif
+//	}
+//}
 void HAL_GPIO_EXTI_Falling_Callback(uint16_t GPIO_Pin)
 {
-	if(GPIO_Pin == Tempo_Button_Pin && tempoButton.button.buttonState == RELEASED)
+	GPIO_PinState buttonRead = HAL_GPIO_ReadPin(tempoButton.button.port, tempoButton.button.port);
+
+	if(GPIO_Pin == Tempo_Button_Pin && tempoButton.button.buttonState == RELEASED && buttonRead == GPIO_PIN_RESET)
 	{
 		// load data
 		tempoButton.button.buttonState = PRESSED;
-		tempoButton.tap_count++;
-
-#ifdef TempoISR_DEBUG
-		sprintf(DEBUG_PRINT_BUFFER,"Tempo Button pressed. tap count: %d\r",tempoButton.tap_count);
-		print(DEBUG_PRINT_BUFFER,DEBUG_BUFFER_SIZE);
-#endif
 	}
 }
 
