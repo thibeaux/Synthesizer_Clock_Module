@@ -198,13 +198,14 @@ int main(void)
 		  // Get Average
 		  for(int i = 1; i<tempoButton.tap_interval_buffer_size+1; i++)
 		  {
-			  // TODO Simplify this
 			  volatile uint32_t temp = tempoButton.tap_intervals[i%tempoButton.tap_interval_buffer_size];
 			  tap_average_period = tap_average_period + temp;
 		  }
 		  // TODO Use bit shifting for division
 		  tap_average_period  = (tap_average_period/tempoButton.tap_interval_buffer_size);
 
+		  // Store average period to clock object
+		  clock1.period = round(tap_average_period/2);
 
 		  // clean up
 		  tempoButton.tap_count = 0;
