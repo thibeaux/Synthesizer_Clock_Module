@@ -81,7 +81,7 @@ typedef struct TempoButton
 	volatile Button button;
 	volatile uint8_t tap_count;
 	volatile uint8_t tap_interval_buffer_size;
-	volatile uint32_t tap_intervals[];
+	volatile uint32_t *tap_intervals; // This is an array of time intervals. You need to allocate this using malloc and tap_interval_buffer_size * sizeof(uint32_t) to make this work.
 }TempoButton;
 
 

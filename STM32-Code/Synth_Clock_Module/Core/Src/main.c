@@ -70,7 +70,7 @@ uint8_t DEBUG_PRINT_BUFFER[DEBUG_BUFFER_SIZE];
 uint32_t last_tick = 0;
 uint32_t last_tick_debouce = 0;
 uint8_t tempo_debounce_interval = 100;
-TempoButtonDebouce = 0;
+uint8_t TempoButtonDebouce = 0; // Flag that we use to create our own wait mechanism
 /* USER CODE END 0 */
 
 /**
@@ -119,9 +119,9 @@ int main(void)
   tempoButton.button.port = Tempo_Button_GPIO_Port;
   tempoButton.button.pin = Tempo_Button_Pin;
   tempoButton.tap_count = 0;
-  tempoButton.tap_interval_buffer_size = 4;
-  tempoButton.tap_intervals[tempoButton.tap_interval_buffer_size];
-  memset(tempoButton.tap_intervals,0,tempoButton.tap_interval_buffer_size);
+  tempoButton.tap_interval_buffer_size = 4; // specify how big our buffer is allowed to be
+  tempoButton.tap_intervals = malloc(tempoButton.tap_interval_buffer_size * sizeof(uint32_t)); // allocate array
+  memset(tempoButton.tap_intervals,0,tempoButton.tap_interval_buffer_size);// initialize with 0s
 
   /* USER CODE END Init */
 
@@ -147,22 +147,23 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  uint32_t tap_array2[4]; // delete later
+
   while (1)
   {
 
 
-// TEMPO BUTTON CODE
+// ********************* TEMPO BUTTON CODE *********************
 
 	  // Allow another button press to be captured
-	  while(((last_tick_debouce + tempo_debounce_interval)< HAL_GetTick()) && (TempoButtonDebouce == 1))
+	  uint32_t now = HAL_GetTick();
+	  while(((last_tick_debouce + tempo_debounce_interval)< now) && (TempoButtonDebouce == 1))
 	  {
-		  TempoButtonDebouce = 0;
+		  TempoButtonDebouce = 0; // lower flag
 	  }
 
 	  // Tempo Button Logic if pressed
 	  GPIO_PinState buttonRead = HAL_GPIO_ReadPin(tempoButton.button.port, tempoButton.button.pin);
-	  if(tempoButton.button.buttonState == PRESSED && buttonRead ==  GPIO_PIN_SET )
+	  if((tempoButton.button.buttonState == PRESSED) && (buttonRead ==  GPIO_PIN_SET) && (!TempoButtonDebouce))
 	  {
 		  //clean up
 		  tempoButton.button.buttonState = RELEASED;
@@ -178,8 +179,7 @@ int main(void)
 		  {
 			  // REMEMBER we start at 1 and don't get to 0 until we get to 4
 			  tempoButton.tap_intervals[(tempoButton.tap_count % tempoButton.tap_interval_buffer_size)] = (HAL_GetTick() - last_tick);
-			  volatile uint32_t temp =  tempoButton.tap_intervals[(tempoButton.tap_count % tempoButton.tap_interval_buffer_size)];
-			  tap_array2[(tempoButton.tap_count % tempoButton.tap_interval_buffer_size)]= temp;
+
 
 #ifdef TempoISR_DEBUG
 			  sprintf(DEBUG_PRINT_BUFFER,"* Time interval: %d\r\n",tempoButton.tap_intervals[(tempoButton.tap_count % tempoButton.tap_interval_buffer_size)]);
@@ -188,10 +188,9 @@ int main(void)
 		  }
 		  tempoButton.tap_count++;
 		  last_tick = HAL_GetTick();
-		  volatile uint32_t debug = tap_array2; // TODO this works, figure out why tempoButton.tap_intervals does not work
-
 
 	  }
+
 	  if((HAL_GetTick()>(last_tick+timeoutValue)) && (tempoButton.tap_count>0))
 	  {
 		  tap_average_period = 0; // temp variable
@@ -217,7 +216,7 @@ int main(void)
 			  print(DEBUG_PRINT_BUFFER,DEBUG_BUFFER_SIZE);
 #endif
 	  }
-
+// ********************* Tempo Button END *********************
 
     /* USER CODE END WHILE */
 
@@ -297,14 +296,14 @@ void HAL_GPIO_EXTI_Falling_Callback(uint16_t GPIO_Pin)
 	{
 		return;
 	}
-	GPIO_PinState buttonRead = HAL_GPIO_ReadPin(tempoButton.button.port, tempoButton.button.port);
+	GPIO_PinState buttonRead = HAL_GPIO_ReadPin(tempoButton.button.port, tempoButton.button.pin);
 
 	if(GPIO_Pin == Tempo_Button_Pin && tempoButton.button.buttonState == RELEASED && buttonRead == GPIO_PIN_RESET)
 	{
 		// load data
 		tempoButton.button.buttonState = PRESSED;
 	}
-	TempoButtonDebouce = 1;
+	TempoButtonDebouce = 1; // raise debouce wait flag
 	last_tick_debouce = HAL_GetTick();
 }
 
