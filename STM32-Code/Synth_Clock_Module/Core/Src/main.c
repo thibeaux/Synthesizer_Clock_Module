@@ -68,6 +68,9 @@ void print();
 uint8_t DEBUG_PRINT_BUFFER[DEBUG_BUFFER_SIZE];
 
 uint32_t last_tick = 0;
+uint32_t last_tick_debouce = 0;
+uint8_t tempo_debounce_interval = 100;
+TempoButtonDebouce = 0;
 /* USER CODE END 0 */
 
 /**
@@ -91,10 +94,11 @@ int main(void)
   unsigned char toggleButton = 0 ; // make sure code executes on falling edge
   unsigned long timeoutCount ; // in miliseconds to reset tap count
   bool startTimeout = false;
-
+  uint32_t tap_average_period = 0;
 
   // init clock objects
   last_tick = HAL_GetTick();
+  last_tick_debouce = HAL_GetTick();
   time1 = HAL_GetTick();
   time2 = HAL_GetTick();
 
@@ -117,6 +121,7 @@ int main(void)
   tempoButton.tap_count = 0;
   tempoButton.tap_interval_buffer_size = 4;
   tempoButton.tap_intervals[tempoButton.tap_interval_buffer_size];
+  memset(tempoButton.tap_intervals,0,tempoButton.tap_interval_buffer_size);
 
   /* USER CODE END Init */
 
@@ -142,24 +147,27 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+  uint32_t tap_array2[4]; // delete later
   while (1)
   {
 
 
 // TEMPO BUTTON CODE
-	  if((HAL_GetTick()>(last_tick+timeoutValue)) && (tempoButton.tap_count>0))
+
+	  // Allow another button press to be captured
+	  while(((last_tick_debouce + tempo_debounce_interval)< HAL_GetTick()) && (TempoButtonDebouce == 1))
 	  {
-		  tempoButton.tap_count = 0;
-#ifdef TempoISR_DEBUG
-			  sprintf(DEBUG_PRINT_BUFFER,"****************************\r\n");
-			  print(DEBUG_PRINT_BUFFER,DEBUG_BUFFER_SIZE);
-#endif
+		  TempoButtonDebouce = 0;
 	  }
 
 	  // Tempo Button Logic if pressed
-	  GPIO_PinState buttonRead = HAL_GPIO_ReadPin(tempoButton.button.port, tempoButton.button.port);
-	  if(tempoButton.button.buttonState == PRESSED && buttonRead ==  GPIO_PIN_RESET )
+	  GPIO_PinState buttonRead = HAL_GPIO_ReadPin(tempoButton.button.port, tempoButton.button.pin);
+	  if(tempoButton.button.buttonState == PRESSED && buttonRead ==  GPIO_PIN_SET )
 	  {
+		  //clean up
+		  tempoButton.button.buttonState = RELEASED;
+
+
 #ifdef TempoISR_DEBUG
 		  sprintf(DEBUG_PRINT_BUFFER,"* Tempo Button released. tap count: %d\r\n",tempoButton.tap_count);
 		  print(DEBUG_PRINT_BUFFER,DEBUG_BUFFER_SIZE);
@@ -168,7 +176,11 @@ int main(void)
 		  // if we have more than 1 sample, do this
 		  if(tempoButton.tap_count > 0)
 		  {
-			  tempoButton.tap_intervals[(tempoButton.tap_count % tempoButton.tap_interval_buffer_size)] = HAL_GetTick() - last_tick;
+			  // REMEMBER we start at 1 and don't get to 0 until we get to 4
+			  tempoButton.tap_intervals[(tempoButton.tap_count % tempoButton.tap_interval_buffer_size)] = (HAL_GetTick() - last_tick);
+			  volatile uint32_t temp =  tempoButton.tap_intervals[(tempoButton.tap_count % tempoButton.tap_interval_buffer_size)];
+			  tap_array2[(tempoButton.tap_count % tempoButton.tap_interval_buffer_size)]= temp;
+
 #ifdef TempoISR_DEBUG
 			  sprintf(DEBUG_PRINT_BUFFER,"* Time interval: %d\r\n",tempoButton.tap_intervals[(tempoButton.tap_count % tempoButton.tap_interval_buffer_size)]);
 			  print(DEBUG_PRINT_BUFFER,DEBUG_BUFFER_SIZE);
@@ -176,14 +188,40 @@ int main(void)
 		  }
 		  tempoButton.tap_count++;
 		  last_tick = HAL_GetTick();
+		  volatile uint32_t debug = tap_array2; // TODO this works, figure out why tempoButton.tap_intervals does not work
 
 
 	  }
+	  if((HAL_GetTick()>(last_tick+timeoutValue)) && (tempoButton.tap_count>0))
+	  {
+		  tap_average_period = 0; // temp variable
+
+		  // Get Average
+		  for(int i = 1; i<tempoButton.tap_interval_buffer_size+1; i++)
+		  {
+			  // TODO Simplify this
+			  volatile uint32_t temp = tempoButton.tap_intervals[i%tempoButton.tap_interval_buffer_size];
+			  tap_average_period = tap_average_period + temp;
+		  }
+		  // TODO Use bit shifting for division
+		  tap_average_period  = (tap_average_period/tempoButton.tap_interval_buffer_size);
+
+
+		  // clean up
+		  tempoButton.tap_count = 0;
+
+#ifdef TempoISR_DEBUG
+		  	  sprintf(DEBUG_PRINT_BUFFER,"Average Period (ms): %d\r\n",tap_average_period);
+		  	  print(DEBUG_PRINT_BUFFER,DEBUG_BUFFER_SIZE);
+			  sprintf(DEBUG_PRINT_BUFFER,"****************************\r\n");
+			  print(DEBUG_PRINT_BUFFER,DEBUG_BUFFER_SIZE);
+#endif
+	  }
+
+
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	  //clean up
-	  tempoButton.button.buttonState = RELEASED;
 
   }
   /* USER CODE END 3 */
@@ -254,6 +292,11 @@ void SystemClock_Config(void)
 //}
 void HAL_GPIO_EXTI_Falling_Callback(uint16_t GPIO_Pin)
 {
+	// if we have already entered this state raise this flag. It will later be released in the main loop
+	if(TempoButtonDebouce)
+	{
+		return;
+	}
 	GPIO_PinState buttonRead = HAL_GPIO_ReadPin(tempoButton.button.port, tempoButton.button.port);
 
 	if(GPIO_Pin == Tempo_Button_Pin && tempoButton.button.buttonState == RELEASED && buttonRead == GPIO_PIN_RESET)
@@ -261,6 +304,8 @@ void HAL_GPIO_EXTI_Falling_Callback(uint16_t GPIO_Pin)
 		// load data
 		tempoButton.button.buttonState = PRESSED;
 	}
+	TempoButtonDebouce = 1;
+	last_tick_debouce = HAL_GetTick();
 }
 
 // This ISR is in charge of pulsing our output clock pins. It schedules when each pin needs to be turn on or off depending

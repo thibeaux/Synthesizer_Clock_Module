@@ -148,7 +148,9 @@ void EXTI0_1_IRQHandler(void)
   /* USER CODE BEGIN EXTI0_1_IRQn 0 */
 
   /* USER CODE END EXTI0_1_IRQn 0 */
+
   HAL_GPIO_EXTI_IRQHandler(Tempo_Button_Pin);
+
   /* USER CODE BEGIN EXTI0_1_IRQn 1 */
   //Tempo_Button(Tempo_Button_Pin);
   /* USER CODE END EXTI0_1_IRQn 1 */
