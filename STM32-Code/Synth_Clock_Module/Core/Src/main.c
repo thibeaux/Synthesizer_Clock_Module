@@ -57,6 +57,7 @@
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
+void CheckStateMachines(RotaryKnob* knob, Application* app);
 /* USER CODE BEGIN PFP */
 void Tempo_Button(uint16_t GPIO_Pin);
 void print();
@@ -104,15 +105,32 @@ int main(void)
 
   clock1.pin = Clock_Pulse_Pin;
   clock1.port = GPIOB; // assign port number
-
-  clock1.period = 250; // BPM 120
+  clock1.bpm = 120;
+  UpdateBPM(clock1.bpm,&clock1);
+//  clock1.period = 250; // BPM 120
 
   clock2.pin = Gate_Pulse_Pin;
   clock2.port = GPIOB;
 
   clock2.period = 250;
 
+  // Init App
+  Application app;
+  app.appMode = FREQUENCY_CONTROL;
+
   // init rotary encoder
+  selectKnob.flag = NONE;
+  selectKnob.incrementState = 0;
+  selectKnob.decrementState = 0;
+
+  selectKnob.sw.port = GPIOA;
+  selectKnob.sw.pin = Rotary_Button_Pin;
+  selectKnob.sw.buttonState = RELEASED;
+  selectKnob.port_dt = GPIOA;
+  selectKnob.dt = Rotary_DT_Pin;
+  selectKnob.port_clk = Rotary_Clock_GPIO_Port;
+  selectKnob.clk = Rotary_Clock_Pin;
+
 
   // init tempo button
   tempoButton.button.buttonState = RELEASED;
@@ -123,6 +141,11 @@ int main(void)
   tempoButton.tap_intervals = malloc(tempoButton.tap_interval_buffer_size * sizeof(uint32_t)); // allocate array
   memset(tempoButton.tap_intervals,0,tempoButton.tap_interval_buffer_size);// initialize with 0s
 
+
+#ifdef freq_debug
+	sprintf(DEBUG_PRINT_BUFFER,"BPM: %d\r\n",clock1.bpm);
+	print(DEBUG_PRINT_BUFFER,DEBUG_BUFFER_SIZE);
+#endif
   /* USER CODE END Init */
 
   /* Configure the system clock */
@@ -150,8 +173,12 @@ int main(void)
 
   while (1)
   {
-
-
+// ********************* Rotary Encoder Code *******************
+	  CheckSwitch(&selectKnob);
+	  CheckDecrement(&selectKnob);
+	  CheckIncrement(&selectKnob);
+	  CheckStateMachines(&selectKnob, &app);
+      UpdateDutyCycle(&clock1);
 // ********************* TEMPO BUTTON CODE *********************
 
 	  // Allow another button press to be captured
@@ -204,14 +231,20 @@ int main(void)
 		  // TODO Use bit shifting for division
 		  tap_average_period  = (tap_average_period/tempoButton.tap_interval_buffer_size);
 
-		  // Store average period to clock object
+		  // Store average period to clock object and sync other stats
 		  clock1.period = round(tap_average_period/2);
+		  clock1.freqHz = (float)((float)(1/(float)(clock1.period )*1000)/2); // FIXME: Not sure why but this works and float CalculateFrequency(uint32_t ms) does not
+		  clock1.bpm = clock1.freqHz * 60;
 
 		  // clean up
 		  tempoButton.tap_count = 0;
 
 #ifdef TempoISR_DEBUG
-		  	  sprintf(DEBUG_PRINT_BUFFER,"Average Period (ms): %d\r\n",tap_average_period);
+		  	  sprintf(DEBUG_PRINT_BUFFER,"Average Period (ms): %d\r\n",clock1.period);
+		  	  print(DEBUG_PRINT_BUFFER,DEBUG_BUFFER_SIZE);
+		  	  sprintf(DEBUG_PRINT_BUFFER,"Frequency (hz): %.2f\r\n",clock1.freqHz);
+		  	  print(DEBUG_PRINT_BUFFER,DEBUG_BUFFER_SIZE);
+		  	  sprintf(DEBUG_PRINT_BUFFER,"BPM: %d\r\n",clock1.bpm);
 		  	  print(DEBUG_PRINT_BUFFER,DEBUG_BUFFER_SIZE);
 			  sprintf(DEBUG_PRINT_BUFFER,"****************************\r\n");
 			  print(DEBUG_PRINT_BUFFER,DEBUG_BUFFER_SIZE);
@@ -274,22 +307,167 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
-//void Tempo_Button(uint16_t GPIO_Pin)
-//{}
-//void HAL_GPIO_EXTI_Rising_Callback(uint16_t GPIO_Pin)
-//{
-//	GPIO_PinState buttonRead = HAL_GPIO_ReadPin(tempoButton.button.port, tempoButton.button.port);
-//	if(GPIO_Pin == Tempo_Button_Pin && tempoButton.button.buttonState == PRESSED)
-//	{
-//		tempoButton.tap_count++;
-//		tempoButton.button.buttonState = RELEASED;
-//
-//#ifdef TempoISR_DEBUG
-//		sprintf(DEBUG_PRINT_BUFFER,"Tempo Button released. tap count: %d, button state:, %d\r",tempoButton.tap_count,buttonRead);
-//		print(DEBUG_PRINT_BUFFER,DEBUG_BUFFER_SIZE);
-//#endif
-//	}
-//}
+void CheckStateMachines(RotaryKnob* knob, Application* app)
+{
+	switch(knob->flag)
+	{
+		case(NONE):
+		{
+		  //Serial.println("No flag"); // debug
+		  break;
+		}
+		case(INCREMENT):
+		{
+		  //Serial.println("Increment case");
+		  switch(app->appMode)
+		  {
+			case(FREQUENCY_CONTROL):
+			{
+			  UpdateBPM((clock1.bpm += 1), &clock1);
+
+			  #ifdef freq_debug
+				sprintf(DEBUG_PRINT_BUFFER,"BPM: %d\r\n",clock1.bpm);
+				print(DEBUG_PRINT_BUFFER,DEBUG_BUFFER_SIZE);
+			  #endif
+
+			  break;
+			}
+			case(DUTYCYCLE_CONTROL):
+			{
+			  if(clock1.dutyCycleValue + 0.1 < 1)
+			  {
+				clock1.dutyCycleValue += 0.1;
+
+				#ifdef debug
+				Serial.print("Ducty Cycle Mode Increment: "); Serial.println(clock1.dutyCycleValue);
+				#endif
+			  }
+			  else
+			  {
+				clock1.dutyCycleValue = .9;
+			  }
+
+			  break;
+			}
+			case(GATE_CONTROL):
+			{
+			  divider += 1;
+			  #ifdef debug
+			  Serial.print("Gate Control Mode Decrement: "); Serial.println(divider);
+			  #endif
+			  break;
+			}
+			default:
+			{
+			  #ifdef debug
+			  Serial.println("Defualt increment app case");
+			  #endif
+
+			  app->appMode = FREQUENCY_CONTROL;
+			  break;
+			}
+		  }
+		  break;
+		}
+		case(DECREMENT):
+		{
+		  //Serial.println("Decrement case");
+		  switch(app->appMode)
+		  {
+			case(FREQUENCY_CONTROL):
+			{
+			  UpdateBPM((clock1.bpm -= 1),&clock1);
+
+			  #ifdef freq_debug
+				sprintf(DEBUG_PRINT_BUFFER,"BPM: %d\r\n",clock1.bpm);
+				print(DEBUG_PRINT_BUFFER,DEBUG_BUFFER_SIZE);
+			  #endif
+
+			  break;
+			}
+			case(DUTYCYCLE_CONTROL):
+			{
+			  if(clock1.dutyCycleValue - 0.1 > -1)
+			  {
+				clock1.dutyCycleValue -= 0.1;
+
+				#ifdef debug
+				Serial.print("Ducty Cycle Mode Decrement: "); Serial.println(clock1.dutyCycleValue);
+				#endif
+			  }
+			  else
+			  {
+				clock1.dutyCycleValue = -0.9;
+			  }
+			  break;
+			}
+			case(GATE_CONTROL):
+			{
+			  divider -= 1;
+			  #ifdef debug
+			  Serial.print("Gate Control Mode Decrement: "); Serial.println(divider);
+			  #endif
+			  break;
+			}
+			default:
+			{
+			  #ifdef debug
+			  Serial.println("Defualt decrement app case");
+			  #endif
+
+			  app->appMode = FREQUENCY_CONTROL;
+			  break;
+			}
+		  }
+		 break;
+		}
+		case(SWITCH):
+		{
+		  switch(app->appMode)
+		  {
+			case(FREQUENCY_CONTROL):
+			{
+			  #ifdef freq_debug
+						sprintf(DEBUG_PRINT_BUFFER,"App Mode: Frequency\r\n");
+						print(DEBUG_PRINT_BUFFER,DEBUG_BUFFER_SIZE);
+			  #endif
+
+			  app->appMode = DUTYCYCLE_CONTROL;
+			  break;
+			}
+			case(DUTYCYCLE_CONTROL):
+			{
+			  #ifdef debug
+			  Serial.println(app.appMode);
+			  #endif
+
+			  app->appMode = GATE_CONTROL;
+			  break;
+			}
+			case(GATE_CONTROL):
+			{
+			  app->appMode = FREQUENCY_CONTROL;
+			  #ifdef debug
+			  Serial.print("Gate Control Entered: ");
+			  Serial.println(app.appMode);
+			  #endif
+			  break;
+			}
+			default:
+			{
+			  app->appMode = FREQUENCY_CONTROL;
+			  break;
+			}
+		  }
+		  break;
+		}
+		default:
+		{break;}
+	  }
+	  knob->flag = NONE; // flag reset
+
+}
+
 void HAL_GPIO_EXTI_Falling_Callback(uint16_t GPIO_Pin)
 {
 	// if we have already entered this state raise this flag. It will later be released in the main loop
@@ -413,7 +591,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 void print(uint8_t* data, size_t size)
 {
 	HAL_UART_Transmit(&huart2, data,size, 100);
-
+	memset(data,0,size);
 }
 /* USER CODE END 4 */
 

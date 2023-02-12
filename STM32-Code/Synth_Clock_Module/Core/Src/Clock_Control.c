@@ -8,6 +8,7 @@
 #include "Clock_Control.h"
 #include "Structures.h"
 #include <math.h>
+#include "App_Config.h"
 
 // SUMMARY: It is passed a new BPM variable. We then calculate the frequency of that BPM, then we get the period
 // length of that BPM value. We then set the clock's attributes to match these new updated values.
@@ -37,12 +38,6 @@ float CalculateFrequency(uint32_t ms)
   hertz = (float)((float)(1/(float)(ms)*1000)/2);
 //  int roundedHertz = round(hertz); // if needed
 
-  // Debug print lines
-  #ifdef debug
-  Serial.print("Frequency calculated (HZ): ");
-  Serial.print(hertz);
-  Serial.print(" from the miliseconds value (ms) "); Serial.println(ms);
-  #endif
 
   return hertz;
 }

@@ -11,5 +11,5 @@
 
 // CONFIG
 #define TempoISR_DEBUG
-
+#define freq_debug
 #endif /* INC_APP_CONFIG_H_ */

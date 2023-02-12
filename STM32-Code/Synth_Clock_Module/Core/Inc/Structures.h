@@ -24,7 +24,7 @@ enum ButtonState {RELEASED = 0, PRESSED = 1};
 typedef struct ButtonObject // template
 {
 	GPIO_TypeDef *port;
-	volatile uint8_t pin ;
+	volatile uint16_t pin ;
 	volatile enum ButtonState buttonState;
 }Button;
 
@@ -46,14 +46,20 @@ typedef struct AppMode
 
 typedef struct RotaryKnob
 {
+	// TODO: Delete legacy code if not used
     enum RotaryEnocderFlag flag;
-    GPIO_TypeDef *port;
-    volatile uint16_t *in;
-    volatile uint8_t sw; // for legacy purposes, move away from this.
-    volatile uint8_t dt;
-    volatile uint8_t clk;
+//    GPIO_TypeDef *port_sw;
+    GPIO_TypeDef *port_dt;
+    GPIO_TypeDef *port_clk;
 
-    volatile bool buttonState; // legacy code, integrate abstract struct Button into this
+//    volatile uint16_t *in;
+//    volatile uint8_t sw; // for legacy purposes, move away from this.
+    volatile uint16_t dt;
+    volatile uint16_t clk;
+
+    volatile Button sw;
+
+//    volatile bool buttonState; // legacy code, integrate abstract struct Button into this
     volatile int incrementState;
     volatile int decrementState;
 }RotaryKnob;

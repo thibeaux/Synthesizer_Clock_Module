@@ -27,7 +27,7 @@ uint16_t dividerCount2 = 0;
 // Timer Global Settings
 unsigned char timerInterruptFlag = 0;
 uint32_t multiplier = 1;
-uint16_t timeoutValue = 3000; // in miliseconds
+uint16_t timeoutValue = 1000; // in miliseconds
 
 // FIXME add these to clock object
 uint32_t time1;
@@ -37,6 +37,9 @@ uint8_t pulseToggle2 = 0 ; // to sequence clock2 pulse
 int  delaybuffer = 0; // for clock1
 int  delaybuffer2 = 0; // for clock2
 int calculatedWaitPeriod = 0; uint8_t calculatedEnd =0;
+
+// Objects
 Clock clock1, clock2;
 TempoButton tempoButton;
+RotaryKnob selectKnob;
 #endif /* INC_GLOBALS_H_ */
