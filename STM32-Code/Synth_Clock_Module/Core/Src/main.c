@@ -58,6 +58,7 @@
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 void CheckStateMachines(RotaryKnob* knob, Application* app);
+void UpdateWindow(Application* app,Clock* clk);
 /* USER CODE BEGIN PFP */
 void Tempo_Button(uint16_t GPIO_Pin);
 void print();
@@ -142,10 +143,6 @@ int main(void)
   memset(tempoButton.tap_intervals,0,tempoButton.tap_interval_buffer_size);// initialize with 0s
 
 
-#ifdef freq_debug
-	sprintf(DEBUG_PRINT_BUFFER,"BPM: %d\r\n",clock1.bpm);
-	print(DEBUG_PRINT_BUFFER,DEBUG_BUFFER_SIZE);
-#endif
   /* USER CODE END Init */
 
   /* Configure the system clock */
@@ -162,6 +159,15 @@ int main(void)
   MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
 
+  // Init display vars
+  uint16_t refreshcounter = 0;
+  ssd1306_Init();
+//  ssd1306_TestFPS();
+
+#ifdef freq_debug
+	sprintf(DEBUG_PRINT_BUFFER,"BPM: %d\r\n",clock1.bpm);
+	print(DEBUG_PRINT_BUFFER,DEBUG_BUFFER_SIZE);
+#endif
 
 // Start Clock Pulse Timer ISR
   HAL_TIM_Base_Start_IT(&htim2);
@@ -173,6 +179,15 @@ int main(void)
 
   while (1)
   {
+// ********************* Display Code *******************
+
+      // Display refresh
+      if (refreshcounter >= 50)
+      {
+         UpdateWindow(&app,&clock1);
+         refreshcounter = 0;
+      }
+       refreshcounter++;
 // ********************* Rotary Encoder Code *******************
 	  CheckSwitch(&selectKnob);
 	  CheckDecrement(&selectKnob);
@@ -307,6 +322,113 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
+uint8_t middleX =20;
+void UpdateWindow(Application* app,Clock* clk)
+{
+	uint8_t page_buffer[100];
+	switch(app->appMode)
+	{
+	  case(FREQUENCY_CONTROL):
+	  {
+		ssd1306_Fill(White);
+
+	    ssd1306_SetCursor(1,0);
+//		ssd1306_WriteString("Frequency Control:", Font_6x8, Black);
+		uint16_t adjustedPeriod = clk->period *2;// FIXME, I think the real stats are doubled than the value being displayed
+
+	    sprintf(page_buffer,"BPM : %d",clock1.bpm);
+	    ssd1306_SetCursor(1,0);
+		ssd1306_WriteString(page_buffer, Font_6x8, Black);
+
+	    sprintf(page_buffer,"Period (ms): %d",clock1.period);
+	    ssd1306_SetCursor(1,10);
+		ssd1306_WriteString(page_buffer, Font_6x8, Black);
+
+	    sprintf(page_buffer,"Frequency (Hz): %.2f",clock1.freqHz);
+	    ssd1306_SetCursor(1,20);
+		ssd1306_WriteString(page_buffer, Font_6x8, Black);
+
+	    ssd1306_UpdateScreen();
+		break;
+	  }
+
+	  case(DUTYCYCLE_CONTROL):
+	  {
+		ssd1306_Fill(White);
+		float mappedValue = ((clk->dutyCycleValue - -0.9)/(0.9 - -0.9))*(0.1-0.9)+0.9; // calculate and map the input number dutycylce value to some number that we can apply as a multipler to our graph
+		uint8_t buffX = middleX * mappedValue *2; // adding *2 to offset and balance out some ratio problems
+
+		sprintf(page_buffer,"Duty Cycle : %.2f",clock1.dutyCycleValue);
+	    ssd1306_SetCursor(1,0);
+		ssd1306_WriteString(page_buffer, Font_6x8, Black);
+
+		ssd1306_Line(1,10,0,SSD1306_HEIGHT - 1,Black);
+		ssd1306_Line(1,10,buffX,10,Black);
+		ssd1306_Line(buffX,10,buffX,SSD1306_HEIGHT - 1,Black);
+		ssd1306_Line(buffX,SSD1306_HEIGHT - 1,40,SSD1306_HEIGHT - 1,Black);
+		ssd1306_Line(40,10,40,SSD1306_HEIGHT - 1,Black);
+
+	    ssd1306_UpdateScreen();
+//		display.clearDisplay();
+//
+//		display.setTextSize(1);      // Normal 1:1 pixel scale
+//		display.setTextColor(SSD1306_WHITE); // Draw white text
+//		display.setCursor(0, 0);     // Start at top-left corner
+//		display.cp437(true);         // Use full 256 char 'Code Page 437' font
+//
+//		// Not all the characters will fit on the display. This is normal.
+//		// Library will draw what it can and the rest will be clipped.
+//		display.write("DUTYCYCLE CONTROL\n");
+//
+//		float mappedValue = ((clk->dutyCycleValue - -0.9)/(0.9 - -0.9))*(0.1-0.9)+0.9; // calculate and map the input number dutycylce value to some number that we can apply as a multipler to our graph
+//		uint8_t buffX = middleX * mappedValue *2; // adding *2 to offset and balance out some ratio problems
+//		// draw graph
+//		display.drawLine(0, 10, 0, display.height()-1, SSD1306_WHITE);
+//		display.drawLine(0, 10, buffX, 10, SSD1306_WHITE); // display.height()-1 mean bottom of screen
+//		display.drawLine(buffX, 10, buffX, display.height()-1, SSD1306_WHITE);
+//		display.drawLine(buffX, display.height()-1, 40, display.height()-1, SSD1306_WHITE);
+//		display.drawLine(40, 10, 40, display.height()-1, SSD1306_WHITE);
+//		// display stats
+//		display.print("        + Duty Cycle: \n          ");display.print(mappedValue * 100); display.print("%");
+//		display.display();
+		break;
+	  }
+	  case(GATE_CONTROL):
+	  {
+		ssd1306_Fill(White);
+
+	    sprintf(page_buffer,"Gate Control");
+	    ssd1306_SetCursor(1,0);
+		ssd1306_WriteString(page_buffer, Font_6x8, Black);
+
+	    sprintf(page_buffer,"Beat Division: %d",divider);
+	    ssd1306_SetCursor(1,10);
+		ssd1306_WriteString(page_buffer, Font_6x8, Black);
+
+		ssd1306_UpdateScreen();
+
+		break;
+	  }
+//	  default:
+//	  {
+//		display.clearDisplay();
+//
+//		display.setTextSize(1);      // Normal 1:1 pixel scale
+//		display.setTextColor(SSD1306_WHITE); // Draw white text
+//		display.setCursor(0, 0);     // Start at top-left corner
+//		display.cp437(true);         // Use full 256 char 'Code Page 437' font
+//
+//		// Not all the characters will fit on the display. This is normal.
+//		// Library will draw what it can and the rest will be clipped.
+//		display.write("Error, default case detected");
+//
+//		display.display();
+//		break;
+//	  }
+	}
+}
+
+
 void CheckStateMachines(RotaryKnob* knob, Application* app)
 {
 	switch(knob->flag)

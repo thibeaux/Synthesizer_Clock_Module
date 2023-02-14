@@ -40,7 +40,7 @@
 // #define SSD1306_MIRROR_HORIZ
 
 // Set inverse color if needed
-// # define SSD1306_INVERSE_COLOR
+ # define SSD1306_INVERSE_COLOR
 
 // Include only needed fonts
 #define SSD1306_INCLUDE_FONT_6x8
