@@ -334,17 +334,18 @@ void CheckStateMachines(RotaryKnob* knob, Application* app)
 			}
 			case(DUTYCYCLE_CONTROL):
 			{
-			  if(clock1.dutyCycleValue + 0.1 < 1)
+			  if(clock1.dutyCycleValue + 0.1 < 0.9)
 			  {
 				clock1.dutyCycleValue += 0.1;
 
-				#ifdef debug
-				Serial.print("Ducty Cycle Mode Increment: "); Serial.println(clock1.dutyCycleValue);
-				#endif
+			#ifdef dutycycle_debug
+				sprintf(DEBUG_PRINT_BUFFER,"Dutycycle: %.2f\r\n",clock1.dutyCycleValue);
+				print(DEBUG_PRINT_BUFFER,DEBUG_BUFFER_SIZE);
+			#endif
 			  }
 			  else
 			  {
-				clock1.dutyCycleValue = .9;
+				clock1.dutyCycleValue = 0.9;
 			  }
 
 			  break;
@@ -352,9 +353,10 @@ void CheckStateMachines(RotaryKnob* knob, Application* app)
 			case(GATE_CONTROL):
 			{
 			  divider += 1;
-			  #ifdef debug
-			  Serial.print("Gate Control Mode Decrement: "); Serial.println(divider);
-			  #endif
+			#ifdef gate_debug
+				sprintf(DEBUG_PRINT_BUFFER,"Gate: %d\r\n",divider);
+				print(DEBUG_PRINT_BUFFER,DEBUG_BUFFER_SIZE);
+			#endif
 			  break;
 			}
 			default:
@@ -387,13 +389,14 @@ void CheckStateMachines(RotaryKnob* knob, Application* app)
 			}
 			case(DUTYCYCLE_CONTROL):
 			{
-			  if(clock1.dutyCycleValue - 0.1 > -1)
+			  if(clock1.dutyCycleValue - 0.1 > -0.9)
 			  {
 				clock1.dutyCycleValue -= 0.1;
 
-				#ifdef debug
-				Serial.print("Ducty Cycle Mode Decrement: "); Serial.println(clock1.dutyCycleValue);
-				#endif
+			#ifdef dutycycle_debug
+				sprintf(DEBUG_PRINT_BUFFER,"Dutycycle: %.2f\r\n",clock1.dutyCycleValue);
+				print(DEBUG_PRINT_BUFFER,DEBUG_BUFFER_SIZE);
+			#endif
 			  }
 			  else
 			  {
@@ -404,9 +407,10 @@ void CheckStateMachines(RotaryKnob* knob, Application* app)
 			case(GATE_CONTROL):
 			{
 			  divider -= 1;
-			  #ifdef debug
-			  Serial.print("Gate Control Mode Decrement: "); Serial.println(divider);
-			  #endif
+			#ifdef gate_debug
+				sprintf(DEBUG_PRINT_BUFFER,"Gate: %d\r\n",divider);
+				print(DEBUG_PRINT_BUFFER,DEBUG_BUFFER_SIZE);
+			#endif
 			  break;
 			}
 			default:
@@ -427,30 +431,32 @@ void CheckStateMachines(RotaryKnob* knob, Application* app)
 		  {
 			case(FREQUENCY_CONTROL):
 			{
-			  #ifdef freq_debug
-						sprintf(DEBUG_PRINT_BUFFER,"App Mode: Frequency\r\n");
-						print(DEBUG_PRINT_BUFFER,DEBUG_BUFFER_SIZE);
-			  #endif
-
 			  app->appMode = DUTYCYCLE_CONTROL;
+
+#ifdef freq_debug
+	sprintf(DEBUG_PRINT_BUFFER,"App Mode: Duty Cycle\r\n");
+	print(DEBUG_PRINT_BUFFER,DEBUG_BUFFER_SIZE);
+#endif
 			  break;
 			}
 			case(DUTYCYCLE_CONTROL):
 			{
-			  #ifdef debug
-			  Serial.println(app.appMode);
-			  #endif
-
 			  app->appMode = GATE_CONTROL;
+
+#ifdef dutycycle_debug
+	sprintf(DEBUG_PRINT_BUFFER,"App Mode: Gate Control\r\n");
+	print(DEBUG_PRINT_BUFFER,DEBUG_BUFFER_SIZE);
+#endif
 			  break;
 			}
 			case(GATE_CONTROL):
 			{
 			  app->appMode = FREQUENCY_CONTROL;
-			  #ifdef debug
-			  Serial.print("Gate Control Entered: ");
-			  Serial.println(app.appMode);
-			  #endif
+
+#ifdef gate_debug
+	sprintf(DEBUG_PRINT_BUFFER,"App Mode: Frequency\r\n");
+	print(DEBUG_PRINT_BUFFER,DEBUG_BUFFER_SIZE);
+#endif
 			  break;
 			}
 			default:

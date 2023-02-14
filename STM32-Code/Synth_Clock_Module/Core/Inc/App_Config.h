@@ -12,4 +12,6 @@
 // CONFIG
 #define TempoISR_DEBUG
 #define freq_debug
+#define dutycycle_debug
+#define gate_debug
 #endif /* INC_APP_CONFIG_H_ */
